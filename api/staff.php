@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 requireRole([ROLE_ADMIN]); // FR-04, FR-05: only admins manage roles/accounts
 
 $pdo = getDbConnection();
@@ -52,7 +52,7 @@ if (isset($_GET['activate'])) {
 $staffList = $pdo->query('SELECT * FROM STAFF ORDER BY STAFF_ID')->fetchAll();
 
 $pageTitle = 'Staff';
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 <h1>Staff Accounts</h1>
 
@@ -61,7 +61,7 @@ require __DIR__ . '/includes/header.php';
 
 <div class="form-box">
   <h3>Add Staff Account</h3>
-  <form method="post" action="/bookinn/staff.php">
+  <form method="post" action="/staff">
     <label>Username</label>
     <input type="text" name="u_name" required>
     <label>Full Name</label>
@@ -91,14 +91,14 @@ require __DIR__ . '/includes/header.php';
     <td><?= $s['IS_ACTIVE'] ? '<span class="status-Available">Active</span>' : '<span class="status-Unavailable">Deactivated</span>' ?></td>
     <td>
         <?php if ($s['IS_ACTIVE']): ?>
-        <a class="btn btn-small btn-danger" href="/bookinn/staff.php?deactivate=<?= (int)$s['STAFF_ID'] ?>"
+        <a class="btn btn-small btn-danger" href="/staff?deactivate=<?= (int)$s['STAFF_ID'] ?>"
            onclick="return confirm('Deactivate this account?');">Deactivate</a>
         <?php else: ?>
-        <a class="btn btn-small" href="/bookinn/staff.php?activate=<?= (int)$s['STAFF_ID'] ?>">Reactivate</a>
+        <a class="btn btn-small" href="/staff?activate=<?= (int)$s['STAFF_ID'] ?>">Reactivate</a>
         <?php endif; ?>
     </td>
 </tr>
 <?php endforeach; ?>
 </table>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

@@ -1,0 +1,7 @@
+node_modules
+.env
+.env.local
+.vscode
+.agents
+bookin verify assets
+database/seed_passwords.php

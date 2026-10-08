@@ -23,6 +23,7 @@ DROP TABLE IF EXISTS CUSTOMER;
 DROP TABLE IF EXISTS STAFF;
 DROP TABLE IF EXISTS CANCELLATION_LOG;
 DROP TABLE IF EXISTS ACCESS_LOG;
+DROP TABLE IF EXISTS APP_SESSION;
 
 -- ------------------------------------------------------------
 -- NOTE on enums: PHP's PDO pgsql driver uses native prepared
@@ -214,6 +215,29 @@ CREATE TABLE GENERATED_REPORT (
     ROW_COUNT     INT,
     GENERATED_AT  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ------------------------------------------------------------
+-- APP_SESSION
+-- DB-backed PHP session storage. Required because the app runs on
+-- Vercel's serverless PHP runtime: each request may be handled by a
+-- different, short-lived function instance with its own ephemeral
+-- filesystem, so PHP's default file-based session storage (which
+-- assumes one persistent server process/disk) cannot work. A custom
+-- SessionHandlerInterface (see includes/db_session_handler.php) reads
+-- and writes session state here instead. Named APP_SESSION (not
+-- SESSION) since SESSION is a reserved SQL keyword in some contexts.
+--
+-- 3NF: single-attribute PK (SESSION_ID); DATA and LAST_ACCESS are each
+-- fully dependent on SESSION_ID only; no transitive dependencies.
+-- ------------------------------------------------------------
+CREATE TABLE APP_SESSION (
+    SESSION_ID    VARCHAR(128) PRIMARY KEY,
+    DATA          TEXT NOT NULL DEFAULT '',
+    LAST_ACCESS   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Supports the garbage-collection sweep (delete sessions idle longer than gc_maxlifetime).
+CREATE INDEX IDX_SESSION_LAST_ACCESS ON APP_SESSION(LAST_ACCESS);
 
 -- ============================================================
 -- SEED DATA (matches the sample rows shown in the normalized tables)

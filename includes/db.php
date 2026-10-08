@@ -11,8 +11,25 @@
  *
  * Required env vars (get these from your Supabase project ->
  * Project Settings -> Database -> Connection parameters):
- *   SUPABASE_DB_HOST     e.g. db.xxxxxxxxxxxx.supabase.co
- *   SUPABASE_DB_PORT     usually 5432 (direct) or 6543 (pooled/pgbouncer)
+ *   SUPABASE_DB_HOST     direct: db.xxxxxxxxxxxx.supabase.co
+ *                        pooled (Supavisor): aws-0-<region>.pooler.supabase.com
+ *                        -- NOTE: the pooled host is DIFFERENT from the direct
+ *                        host, not just a different port on the same host.
+ *                        Copy it from the "Connection pooling" section of the
+ *                        dashboard, not the direct-connection section.
+ *   SUPABASE_DB_PORT     6543 (pooled/Supavisor) or 5432 (direct)
+ *                        -- Default here is 6543: on Vercel's serverless PHP
+ *                        runtime, every invocation can open a brand new DB
+ *                        connection (no long-lived process to reuse one),
+ *                        so a direct connection risks exhausting Postgres's
+ *                        max_connections under concurrent traffic. The
+ *                        pooled/Supavisor port multiplexes many short-lived
+ *                        app connections over a smaller pool of real
+ *                        Postgres connections, which is the right fit for
+ *                        serverless. For local dev (persistent PHP process,
+ *                        low concurrency) either port works; override to
+ *                        5432 + the direct host in your local .env if you
+ *                        prefer.
  *   SUPABASE_DB_NAME     usually "postgres"
  *   SUPABASE_DB_USER     usually "postgres" (or a scoped role you create)
  *   SUPABASE_DB_PASSWORD the database password set for your project
@@ -67,7 +84,7 @@ function envOrDefault(string $name, ?string $default = null): ?string {
 
 // ---- Connection settings (populate via .env or real env vars) ----
 define('DB_HOST',     envOrDefault('SUPABASE_DB_HOST', '127.0.0.1'));
-define('DB_PORT',     envOrDefault('SUPABASE_DB_PORT', '5432'));
+define('DB_PORT',     envOrDefault('SUPABASE_DB_PORT', '6543'));
 define('DB_NAME',     envOrDefault('SUPABASE_DB_NAME', 'postgres'));
 define('DB_USER',     envOrDefault('SUPABASE_DB_USER', 'postgres'));
 define('DB_PASS',     envOrDefault('SUPABASE_DB_PASSWORD', ''));

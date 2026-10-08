@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 requireRole([ROLE_ADMIN, ROLE_FRONT_DESK]);
 
 $pdo = getDbConnection();
@@ -81,7 +81,7 @@ if (isset($_GET['no_show'])) {
     foreach ($stmt->fetchAll() as $row) {
         syncRoomStatus($pdo, (int)$row['ROOM_NO']);
     }
-    header('Location: /bookinn/reservations.php');
+    header('Location: /reservations');
     exit;
 }
 
@@ -98,7 +98,7 @@ $reservations = $pdo->query("SELECT r.RES_ID, c.CUS_NAME, r.BOOKING_STATUS, r.CR
     ORDER BY r.RES_ID DESC")->fetchAll();
 
 $pageTitle = 'Reservations';
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 <h1>Reservations</h1>
 
@@ -107,7 +107,7 @@ require __DIR__ . '/includes/header.php';
 
 <div class="form-box">
   <h3>New Reservation</h3>
-  <form method="post" action="/bookinn/reservations.php">
+  <form method="post" action="/reservations">
     <label>Guest</label>
     <select name="cus_id" required>
       <option value="">-- select guest --</option>
@@ -143,18 +143,18 @@ require __DIR__ . '/includes/header.php';
     <td class="status-<?= str_replace(['-',' '],'',$r['BOOKING_STATUS']) ?>"><?= h($r['BOOKING_STATUS']) ?></td>
     <td>
         <?php if (in_array($r['BOOKING_STATUS'], ['Pending','Confirmed'], true)): ?>
-        <form class="inline" method="post" action="/bookinn/reservations.php" onsubmit="return confirm('Cancel this reservation?');">
+        <form class="inline" method="post" action="/reservations" onsubmit="return confirm('Cancel this reservation?');">
             <input type="hidden" name="res_id" value="<?= (int)$r['RES_ID'] ?>">
             <input type="text" name="reason" placeholder="reason (optional)" style="width:110px;">
             <button type="submit" name="cancel_reservation" class="btn btn-small btn-danger">Cancel</button>
         </form>
-        <a class="btn btn-small" href="/bookinn/reservations.php?no_show=<?= (int)$r['RES_ID'] ?>"
+        <a class="btn btn-small" href="/reservations?no_show=<?= (int)$r['RES_ID'] ?>"
            onclick="return confirm('Mark this reservation as No-Show?');">No-Show</a>
         <?php endif; ?>
-        <a class="btn btn-small" href="/bookinn/payments.php?res_id=<?= (int)$r['RES_ID'] ?>">Payments</a>
+        <a class="btn btn-small" href="/payments?res_id=<?= (int)$r['RES_ID'] ?>">Payments</a>
     </td>
 </tr>
 <?php endforeach; ?>
 </table>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

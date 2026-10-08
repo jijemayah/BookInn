@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 requireRole([ROLE_ADMIN, ROLE_FRONT_DESK]);
 
 $pdo = getDbConnection();
@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['archive'])) {
     $stmt = $pdo->prepare('UPDATE CUSTOMER SET IS_ACTIVE = FALSE WHERE CUS_ID = :id');
     $stmt->execute([':id' => (int)$_GET['archive']]);
-    header('Location: /bookinn/customers.php');
+    header('Location: /customers');
     exit;
 }
 
@@ -52,7 +52,7 @@ if (isset($_GET['edit'])) {
 $customers = $pdo->query('SELECT * FROM CUSTOMER WHERE IS_ACTIVE = TRUE ORDER BY CUS_NAME')->fetchAll();
 
 $pageTitle = 'Guests';
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 <h1>Guest Management</h1>
 
@@ -61,7 +61,7 @@ require __DIR__ . '/includes/header.php';
 
 <div class="form-box">
   <h3><?= $editCustomer ? 'Edit Guest' : 'Add Guest' ?></h3>
-  <form method="post" action="/bookinn/customers.php">
+  <form method="post" action="/customers">
     <?php if ($editCustomer): ?><input type="hidden" name="cus_id" value="<?= h((string)$editCustomer['CUS_ID']) ?>"><?php endif; ?>
     <label>Full Name</label>
     <input type="text" name="cus_name" required value="<?= h($editCustomer['CUS_NAME'] ?? '') ?>">
@@ -86,12 +86,12 @@ require __DIR__ . '/includes/header.php';
     <td><?= h($c['CUS_MOBILE']) ?></td>
     <td><?= h($c['VALID_ID']) ?></td>
     <td>
-        <a class="btn btn-small" href="/bookinn/customers.php?edit=<?= (int)$c['CUS_ID'] ?>">Edit</a>
-        <a class="btn btn-small btn-danger" href="/bookinn/customers.php?archive=<?= (int)$c['CUS_ID'] ?>"
+        <a class="btn btn-small" href="/customers?edit=<?= (int)$c['CUS_ID'] ?>">Edit</a>
+        <a class="btn btn-small btn-danger" href="/customers?archive=<?= (int)$c['CUS_ID'] ?>"
            onclick="return confirm('Archive this guest? Historical bookings are retained.');">Archive</a>
     </td>
 </tr>
 <?php endforeach; ?>
 </table>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

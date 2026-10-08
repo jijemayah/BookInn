@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 requireRole([ROLE_ADMIN, ROLE_FINANCE]); // FR-28, FR-30: reports restricted to admins/finance
 
 $pdo = getDbConnection();
@@ -61,13 +61,13 @@ try {
 }
 
 $pageTitle = 'Reports';
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 <h1>Reports</h1>
 
 <div class="form-box">
   <h3>Filter</h3>
-  <form method="get" action="/bookinn/reports.php">
+  <form method="get" action="/reports">
     <label>Check-in From</label>
     <input type="date" name="date_from" value="<?= h($dateFrom) ?>">
     <label>Check-out To</label>
@@ -106,4 +106,4 @@ require __DIR__ . '/includes/header.php';
 <?php endif; ?>
 </table>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

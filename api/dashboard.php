@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
 
 $pdo = getDbConnection();
@@ -20,7 +20,7 @@ $stmt = $pdo->query("SELECT r.RES_ID, c.CUS_NAME, r.BOOKING_STATUS, r.CREATED_AT
 $recentReservations = $stmt->fetchAll();
 
 $pageTitle = 'Dashboard';
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 <h1>Dashboard</h1>
 
@@ -49,8 +49,8 @@ require __DIR__ . '/includes/header.php';
 </table>
 
 <p>
-  <a class="btn" href="/bookinn/reservations.php?action=new">+ New Reservation</a>
-  <a class="btn" href="/bookinn/customers.php?action=new">+ New Guest</a>
+  <a class="btn" href="/reservations?action=new">+ New Reservation</a>
+  <a class="btn" href="/customers?action=new">+ New Guest</a>
 </p>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

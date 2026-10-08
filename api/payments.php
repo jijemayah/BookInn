@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 requireRole([ROLE_ADMIN, ROLE_FINANCE, ROLE_FRONT_DESK]);
 
 $pdo = getDbConnection();
@@ -99,7 +99,7 @@ $stmt->execute($params);
 $payments = $stmt->fetchAll();
 
 $pageTitle = 'Payments';
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 <h1>Payments</h1>
 
@@ -108,7 +108,7 @@ require __DIR__ . '/includes/header.php';
 
 <div class="form-box">
   <h3>Record Payment</h3>
-  <form method="post" action="/bookinn/payments.php">
+  <form method="post" action="/payments">
     <label>Reservation</label>
     <select name="res_id" required>
       <option value="">-- select reservation --</option>
@@ -148,7 +148,7 @@ require __DIR__ . '/includes/header.php';
     <td><?= $p['RCT_NO'] ? '#' . (int)$p['RCT_NO'] : '-' ?></td>
     <td>
         <?php if ($p['PAY_STATUS'] !== 'Refunded' && in_array(currentRole(), [ROLE_ADMIN, ROLE_FINANCE], true)): ?>
-        <form class="inline" method="post" action="/bookinn/payments.php" onsubmit="return confirm('Refund this payment?');">
+        <form class="inline" method="post" action="/payments" onsubmit="return confirm('Refund this payment?');">
             <input type="hidden" name="pay_id" value="<?= (int)$p['PAY_ID'] ?>">
             <button type="submit" name="refund_payment" class="btn btn-small btn-danger">Refund</button>
         </form>
@@ -158,4 +158,4 @@ require __DIR__ . '/includes/header.php';
 <?php endforeach; ?>
 </table>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

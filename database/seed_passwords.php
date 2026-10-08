@@ -2,8 +2,11 @@
 /**
  * One-time setup script: sets real password hashes for the seeded staff
  * accounts (run this once after importing schema.sql).
- * Usage: visit /bookinn/database/seed_passwords.php in the browser once,
- * then delete or block access to this file.
+ * Usage: run this once locally via `php database/seed_passwords.php`
+ * (against your Supabase DB, using the credentials in your local .env).
+ * This file is excluded from the Vercel deployment via .vercelignore —
+ * it must never be reachable over the web, since it contains default
+ * plaintext passwords in its source.
  *
  * Default passwords (change immediately after first login):
  *   KDPALVARADO -> Front#Desk2026

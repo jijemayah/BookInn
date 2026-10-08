@@ -5,8 +5,22 @@
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/db_session_handler.php';
 
 if (session_status() === PHP_SESSION_NONE) {
+    // Use DB-backed sessions (APP_SESSION table) instead of PHP's default
+    // file-based session storage, since Vercel's serverless PHP runtime
+    // does not guarantee a shared, persistent filesystem across requests.
+    session_set_save_handler(new DbSessionHandler(getDbConnection()), true);
+    // Serverless functions typically run behind HTTPS at the platform edge;
+    // mark the session cookie accordingly so it isn't sent over plain HTTP.
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
@@ -69,7 +83,7 @@ function currentStaffId(): ?int {
  */
 function requireLogin(): void {
     if (!isLoggedIn()) {
-        header('Location: /bookinn/login.php');
+        header('Location: /login');
         exit;
     }
 }

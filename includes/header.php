@@ -12,28 +12,28 @@ $pageTitle = $pageTitle ?? 'BookInn';
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= h($pageTitle) ?> - BookInn</title>
-<link rel="stylesheet" href="/bookinn/assets/style.css">
+<link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
 <?php if (isLoggedIn()): ?>
 <header class="topbar">
     <div class="brand">BookInn</div>
     <nav>
-        <a href="/bookinn/dashboard.php">Dashboard</a>
-        <a href="/bookinn/customers.php">Guests</a>
-        <a href="/bookinn/rooms.php">Rooms</a>
-        <a href="/bookinn/reservations.php">Reservations</a>
-        <a href="/bookinn/payments.php">Payments</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/customers">Guests</a>
+        <a href="/rooms">Rooms</a>
+        <a href="/reservations">Reservations</a>
+        <a href="/payments">Payments</a>
         <?php if (in_array(currentRole(), [ROLE_ADMIN, ROLE_FINANCE], true)): ?>
-        <a href="/bookinn/reports.php">Reports</a>
+        <a href="/reports">Reports</a>
         <?php endif; ?>
         <?php if (currentRole() === ROLE_ADMIN): ?>
-        <a href="/bookinn/staff.php">Staff</a>
+        <a href="/staff">Staff</a>
         <?php endif; ?>
     </nav>
     <div class="session-info">
         <?= h($_SESSION['name']) ?> (<?= h($_SESSION['role']) ?>)
-        &middot; <a href="/bookinn/logout.php">Logout</a>
+        &middot; <a href="/logout">Logout</a>
     </div>
 </header>
 <?php endif; ?>

@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 requireRole([ROLE_ADMIN, ROLE_FRONT_DESK]);
 
 $pdo = getDbConnection();
@@ -57,7 +57,7 @@ if (isset($_GET['toggle_lock'])) {
     } else {
         $error = 'Cannot lock a room that is currently Reserved or Occupied.';
     }
-    header('Location: /bookinn/rooms.php');
+    header('Location: /rooms');
     exit;
 }
 
@@ -67,7 +67,7 @@ $rooms = $pdo->query('SELECT ro.*, rt.ROOM_TYPE, rt.ROOM_PRICE
     ORDER BY ro.ROOM_NO')->fetchAll();
 
 $pageTitle = 'Rooms';
-require __DIR__ . '/includes/header.php';
+require __DIR__ . '/../includes/header.php';
 ?>
 <h1>Room Management</h1>
 
@@ -76,7 +76,7 @@ require __DIR__ . '/includes/header.php';
 
 <div class="form-box">
   <h3>Add Room Type</h3>
-  <form method="post" action="/bookinn/rooms.php">
+  <form method="post" action="/rooms">
     <label>Room Type Name</label>
     <input type="text" name="room_type" required placeholder="e.g. Standard, Deluxe">
     <label>Price per Day</label>
@@ -87,7 +87,7 @@ require __DIR__ . '/includes/header.php';
 
 <div class="form-box">
   <h3>Add Room</h3>
-  <form method="post" action="/bookinn/rooms.php">
+  <form method="post" action="/rooms">
     <label>Room Number</label>
     <input type="text" name="room_no" required pattern="[0-9]+">
     <label>Room Type</label>
@@ -121,7 +121,7 @@ require __DIR__ . '/includes/header.php';
     <td>
         <?php if (in_array($r['ROOM_STATUS'], ['Available','Unavailable'], true)): ?>
         <a class="btn btn-small <?= $r['ROOM_STATUS']==='Unavailable' ? '' : 'btn-danger' ?>"
-           href="/bookinn/rooms.php?toggle_lock=<?= (int)$r['ROOM_NO'] ?>">
+           href="/rooms?toggle_lock=<?= (int)$r['ROOM_NO'] ?>">
            <?= $r['ROOM_STATUS']==='Unavailable' ? 'Clear Lock' : 'Mark Unavailable' ?>
         </a>
         <?php else: ?>
@@ -132,4 +132,4 @@ require __DIR__ . '/includes/header.php';
 <?php endforeach; ?>
 </table>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require __DIR__ . '/../includes/footer.php'; ?>
