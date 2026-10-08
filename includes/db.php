@@ -40,6 +40,19 @@
  *   SUPABASE_DB_SSLMODE  optional, defaults to "require"
  */
 
+// Never print raw PHP errors/warnings/deprecation notices into the HTTP
+// response body. Besides being a security concern (leaking file paths,
+// query fragments, stack traces to end users), on some PHP runtimes
+// (observed on Vercel's vercel-php) even a single E_DEPRECATED notice
+// printed to output counts as "headers sent", which then breaks every
+// later session_start()/header() call for the rest of the request with
+// cascading "headers already sent" warnings. Log errors instead of
+// displaying them; this file is required first by every entrypoint, so
+// setting it here covers the whole app.
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
 /**
  * Minimal .env loader (no external dependencies). Only used if a .env
  * file exists at the project root; real environment variables always

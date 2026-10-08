@@ -68,13 +68,13 @@ class DbSessionHandler implements SessionHandlerInterface {
         }
     }
 
-    public function gc(int $max_lifetime): bool {
+    public function gc(int $max_lifetime): int|false {
         try {
             $stmt = $this->pdo->prepare(
                 "DELETE FROM APP_SESSION WHERE LAST_ACCESS < (CURRENT_TIMESTAMP - (:seconds || ' seconds')::interval)"
             );
             $stmt->execute([':seconds' => $max_lifetime]);
-            return true;
+            return $stmt->rowCount();
         } catch (Throwable $e) {
             return false;
         }
