@@ -1,0 +1,16 @@
+# Environment secrets (Supabase DB credentials)
+.env
+.env.local
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Node (package.json deps, if any installed)
+node_modules/
+
+# VS Code (may contain local DB connection details)
+.vscode/
+
+# PHP
+*.log
