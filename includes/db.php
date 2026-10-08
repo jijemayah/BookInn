@@ -9,14 +9,12 @@
  * them via a .env file (see .env.example) loaded by your web server /
  * runtime, or real OS environment variables.
  *
- * Required env vars (get these from your Supabase project ->
- * Project Settings -> Database -> Connection parameters):
+ * Required env vars (get these from your Supabase project's "Connect"
+ * dialog -> pick a connection type from the dropdown):
  *   SUPABASE_DB_HOST     direct: db.xxxxxxxxxxxx.supabase.co
- *                        pooled (Supavisor): aws-0-<region>.pooler.supabase.com
+ *                        pooled (Supavisor "Transaction pooler"): aws-0-<region>.pooler.supabase.com
  *                        -- NOTE: the pooled host is DIFFERENT from the direct
  *                        host, not just a different port on the same host.
- *                        Copy it from the "Connection pooling" section of the
- *                        dashboard, not the direct-connection section.
  *   SUPABASE_DB_PORT     6543 (pooled/Supavisor) or 5432 (direct)
  *                        -- Default here is 6543: on Vercel's serverless PHP
  *                        runtime, every invocation can open a brand new DB
@@ -31,7 +29,13 @@
  *                        5432 + the direct host in your local .env if you
  *                        prefer.
  *   SUPABASE_DB_NAME     usually "postgres"
- *   SUPABASE_DB_USER     usually "postgres" (or a scoped role you create)
+ *   SUPABASE_DB_USER     direct: usually "postgres"
+ *                        pooled (Supavisor): "postgres.<project-ref>"
+ *                        (e.g. postgres.ihqfasbxscdlrpamojwv) -- the username
+ *                        is ALSO different in pooler mode, not just host/port.
+ *                        Copy the exact username from the pooler connection
+ *                        string shown in the dashboard, it will not work if
+ *                        you reuse the direct connection's plain "postgres".
  *   SUPABASE_DB_PASSWORD the database password set for your project
  *   SUPABASE_DB_SSLMODE  optional, defaults to "require"
  */

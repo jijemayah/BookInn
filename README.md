@@ -66,12 +66,12 @@ Go to [https://supabase.com/dashboard](https://supabase.com/dashboard), create a
 
 ### 2. Get your database connection details
 
-In the Supabase dashboard: **Project Settings → Database → Connection parameters**. There are two connection types you'll need, depending on where the app runs:
+In the Supabase dashboard, click the **Connect** button (near the top of the project page) and pick a connection type from the dropdown — there are two you'll need, depending on where the app runs:
 
-- **Direct connection** (good for local development): host like `db.xxxxxxxxxxxxxxxxxxxx.supabase.co`, port `5432`.
-- **Pooled connection / Supavisor** (required for Vercel): a *different* hostname, like `aws-0-<region>.pooler.supabase.com`, port `6543`. Copy this from the "Connection pooling" section of the dashboard, not the direct-connection section. Serverless functions open a fresh DB connection on every invocation, so pooling avoids exhausting Postgres's connection limit under concurrent traffic.
+- **Direct connection** (good for local development): host like `db.xxxxxxxxxxxxxxxxxxxx.supabase.co`, port `5432`, user `postgres`.
+- **Transaction pooler / Supavisor** (required for Vercel): a *different* hostname, like `aws-0-<region>.pooler.supabase.com`, port `6543`. The username is also different here — `postgres.<project-ref>` (e.g. `postgres.ihqfasbxscdlrpamojwv`), not plain `postgres`. Copy the exact values from the connection string shown in the "Connect" dialog's Transaction pooler tab. Serverless functions open a fresh DB connection on every invocation, so pooling avoids exhausting Postgres's connection limit under concurrent traffic.
 
-Both share the same database name (usually `postgres`), user (usually `postgres`), and password (the one you set when creating the project).
+Both share the same database name (usually `postgres`) and password (the one you set when creating the project).
 
 ### 3. Configure environment variables
 
@@ -170,7 +170,7 @@ vercel env add SUPABASE_DB_PASSWORD
 vercel env add SUPABASE_DB_SSLMODE
 ```
 
-For `SUPABASE_DB_PORT`, enter `6543`. For `SUPABASE_DB_HOST`, enter the pooler hostname (`aws-0-<region>.pooler.supabase.com`), not the direct `db.xxxx.supabase.co` host.
+For `SUPABASE_DB_PORT`, enter `6543`. For `SUPABASE_DB_HOST`, enter the pooler hostname (`aws-0-<region>.pooler.supabase.com`), not the direct `db.xxxx.supabase.co` host. For `SUPABASE_DB_USER`, use the pooler-specific username (`postgres.<project-ref>`), not plain `postgres` — the transaction pooler requires this format to route the connection to the right project.
 
 Alternatively, set these from the Vercel dashboard: **Project Settings → Environment Variables**.
 
