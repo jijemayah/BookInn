@@ -4,6 +4,7 @@ require_once __DIR__ . '/includes/functions.php';
 requireLogin();
 
 $pdo = getDbConnection();
+expireStaleHolds($pdo); // Business Rule: Hold Expiration (Pending + unpaid > 48h -> auto-cancel, release room)
 
 $totalRooms     = (int)$pdo->query('SELECT COUNT(*) FROM ROOM')->fetchColumn();
 $availableRooms = (int)$pdo->query("SELECT COUNT(*) FROM ROOM WHERE ROOM_STATUS = 'Available'")->fetchColumn();

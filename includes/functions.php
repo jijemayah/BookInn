@@ -71,16 +71,14 @@ function syncRoomStatus(PDO $pdo, int $roomNo, bool $force = false): void {
 }
 
 /**
- * Recalculate a reservation's payment status from its PAYMENT rows vs.
- * the total cost of its booked rooms, and persist to all PAYMENT rows'
- * PAY_STATUS for that reservation (denormalized status mirror requested
- * by ERD: PAYMENT.PAY_STATUS reflects the reservation's paid state).
- * Also flags overpayment.
+ * Compute a reservation's total cost (sum over its booked rooms of
+ * nights * room price/day) and total paid so far (excluding refunded
+ * payments). Used to enforce the Overpayment Guard business rule
+ * *before* a new payment is inserted, not just as a post-hoc flag.
  *
- * Returns an array: ['status' => string, 'total_cost' => float, 'total_paid' => float, 'overpaid' => bool]
+ * Returns ['total_cost' => float, 'total_paid' => float]
  */
-function syncPaymentStatus(PDO $pdo, int $resId): array {
-    // total cost = sum over reservation_room of (room price/day * nights)
+function getReservationBalance(PDO $pdo, int $resId): array {
     $stmt = $pdo->prepare('SELECT rr.CHECK_IN_DATE, rr.CHECK_OUT_DATE, rt.ROOM_PRICE
         FROM RESERVATION_ROOM rr
         INNER JOIN ROOM ro ON ro.ROOM_NO = rr.ROOM_NO
@@ -96,6 +94,29 @@ function syncPaymentStatus(PDO $pdo, int $resId): array {
     $stmt = $pdo->prepare('SELECT COALESCE(SUM(PAY_AMT),0) FROM PAYMENT WHERE RES_ID = :res AND PAY_STATUS != \'Refunded\'');
     $stmt->execute([':res' => $resId]);
     $totalPaid = (float)$stmt->fetchColumn();
+
+    return ['total_cost' => $totalCost, 'total_paid' => $totalPaid];
+}
+
+/**
+ * Recalculate a reservation's payment status from its PAYMENT rows vs.
+ * the total cost of its booked rooms, and persist to all PAYMENT rows'
+ * PAY_STATUS for that reservation (denormalized status mirror requested
+ * by ERD: PAYMENT.PAY_STATUS reflects the reservation's paid state).
+ *
+ * Overpayment itself is blocked up-front at insert time (see
+ * getReservationBalance() + the check in payments.php) per the
+ * Business Rule: "The total payments logged cannot exceed the total
+ * reservation cost." This function no longer needs to flag overpayment
+ * after the fact, since it should never occur, but still reports it
+ * defensively in case of concurrent/legacy data.
+ *
+ * Returns an array: ['status' => string, 'total_cost' => float, 'total_paid' => float, 'overpaid' => bool]
+ */
+function syncPaymentStatus(PDO $pdo, int $resId): array {
+    $balance = getReservationBalance($pdo, $resId);
+    $totalCost = $balance['total_cost'];
+    $totalPaid = $balance['total_paid'];
 
     $overpaid = $totalPaid > $totalCost && $totalCost > 0;
 
@@ -121,4 +142,57 @@ function syncPaymentStatus(PDO $pdo, int $resId): array {
 
 function h(?string $value): string {
     return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Business Rule: Hold Expiration — "Unpaid bookings auto-expire after a
+ * set grace period (e.g., 24-48 hours), instantly releasing the room
+ * back into the available pool."
+ *
+ * Lazily sweeps Pending reservations (no payment logged, i.e. still
+ * Pending rather than auto-Confirmed by syncPaymentStatus()) that were
+ * created more than $graceHours ago. Each expired reservation is marked
+ * Cancelled, audit-logged to CANCELLATION_LOG, and its room(s) released
+ * via syncRoomStatus(). Called opportunistically at the top of pages
+ * that read reservation/room state, so no external cron job is required.
+ */
+function expireStaleHolds(PDO $pdo, int $graceHours = 48): void {
+    $stmt = $pdo->prepare("SELECT RES_ID FROM RESERVATION
+        WHERE BOOKING_STATUS = 'Pending'
+          AND CREATED_AT < (CURRENT_TIMESTAMP - (:hours || ' hours')::interval)");
+    $stmt->execute([':hours' => $graceHours]);
+    $expiredIds = array_column($stmt->fetchAll(), 'RES_ID');
+
+    foreach ($expiredIds as $resId) {
+        $resId = (int)$resId;
+
+        $pdo->beginTransaction();
+        try {
+            // Re-check status under lock in case another request already handled it.
+            $pdo->prepare('SELECT RES_ID FROM RESERVATION WHERE RES_ID = :id FOR UPDATE')->execute([':id' => $resId]);
+            $stmt = $pdo->prepare("SELECT BOOKING_STATUS FROM RESERVATION WHERE RES_ID = :id");
+            $stmt->execute([':id' => $resId]);
+            if ($stmt->fetchColumn() !== 'Pending') {
+                $pdo->rollBack();
+                continue;
+            }
+
+            $pdo->prepare("UPDATE RESERVATION SET BOOKING_STATUS = 'Cancelled' WHERE RES_ID = :id")
+                ->execute([':id' => $resId]);
+
+            $pdo->prepare('INSERT INTO CANCELLATION_LOG (RES_ID, STAFF_ID, REASON) VALUES (:id, NULL, :r)')
+                ->execute([':id' => $resId, ':r' => "Auto-expired: no payment within {$graceHours}h hold period"]);
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            continue;
+        }
+
+        $stmt = $pdo->prepare('SELECT ROOM_NO FROM RESERVATION_ROOM WHERE RES_ID = :id');
+        $stmt->execute([':id' => $resId]);
+        foreach ($stmt->fetchAll() as $row) {
+            syncRoomStatus($pdo, (int)$row['ROOM_NO']);
+        }
+    }
 }

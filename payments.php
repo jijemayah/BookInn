@@ -20,21 +20,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO PAYMENT (RES_ID, STAFF_ID, PAY_METHOD, PAY_STATUS, PAY_DATE, PAY_AMT)
-                VALUES (:r, :s, :m, \'Unpaid\', :d, :a) RETURNING PAY_ID');
-            $stmt->execute([':r' => $resId, ':s' => currentStaffId(), ':m' => $method, ':d' => $date, ':a' => $amt]);
-            $payId = (int)$stmt->fetchColumn();
+            // Lock the reservation row to prevent two concurrent payments from
+            // both passing the overpayment check and together exceeding the cost.
+            $pdo->prepare('SELECT RES_ID FROM RESERVATION WHERE RES_ID = :r FOR UPDATE')->execute([':r' => $resId]);
 
-            // auto-generate receipt (Business Rule: Receipt Generation)
-            $stmt = $pdo->prepare('INSERT INTO RECEIPT (PAY_ID, RCT_DATE) VALUES (:p, :d)');
-            $stmt->execute([':p' => $payId, ':d' => $date]);
+            $balance = getReservationBalance($pdo, (int)$resId);
+            $wouldBePaid = $balance['total_paid'] + (float)$amt;
 
-            $pdo->commit();
+            // Business Rule: Overpayment Guard — total payments logged cannot
+            // exceed the total reservation cost. Blocked up front, not just
+            // flagged after the fact.
+            if ($balance['total_cost'] > 0 && $wouldBePaid > $balance['total_cost']) {
+                $pdo->rollBack();
+                $remaining = max(0, $balance['total_cost'] - $balance['total_paid']);
+                $error = sprintf(
+                    'Payment rejected: this would overpay the reservation. Remaining balance is ₱%s.',
+                    number_format($remaining, 2)
+                );
+            } else {
+                $stmt = $pdo->prepare('INSERT INTO PAYMENT (RES_ID, STAFF_ID, PAY_METHOD, PAY_STATUS, PAY_DATE, PAY_AMT)
+                    VALUES (:r, :s, :m, \'Unpaid\', :d, :a) RETURNING PAY_ID');
+                $stmt->execute([':r' => $resId, ':s' => currentStaffId(), ':m' => $method, ':d' => $date, ':a' => $amt]);
+                $payId = (int)$stmt->fetchColumn();
 
-            $result = syncPaymentStatus($pdo, (int)$resId);
-            $success = "Payment #$payId recorded. Reservation status: {$result['status']}.";
-            if ($result['overpaid']) {
-                $success .= ' Warning: total payments exceed the reservation cost — flagged for review.';
+                // auto-generate receipt (Business Rule: Receipt Generation)
+                $stmt = $pdo->prepare('INSERT INTO RECEIPT (PAY_ID, RCT_DATE) VALUES (:p, :d)');
+                $stmt->execute([':p' => $payId, ':d' => $date]);
+
+                $pdo->commit();
+
+                $result = syncPaymentStatus($pdo, (int)$resId);
+                $success = "Payment #$payId recorded. Reservation status: {$result['status']}.";
             }
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }

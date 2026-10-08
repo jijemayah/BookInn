@@ -4,6 +4,7 @@ require_once __DIR__ . '/includes/functions.php';
 requireRole([ROLE_ADMIN, ROLE_FRONT_DESK]);
 
 $pdo = getDbConnection();
+expireStaleHolds($pdo); // Business Rule: Hold Expiration (Pending + unpaid > 48h -> auto-cancel, release room)
 $error = '';
 $success = '';
 

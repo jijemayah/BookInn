@@ -92,7 +92,15 @@ function logAccess(?int $staffId, string $action, bool $authorized): void {
     try {
         $pdo = getDbConnection();
         $stmt = $pdo->prepare('INSERT INTO ACCESS_LOG (STAFF_ID, ACTION, IS_AUTHORIZED) VALUES (:s, :a, :ok)');
-        $stmt->execute([':s' => $staffId, ':a' => $action, ':ok' => $authorized]);
+        // Bind the boolean explicitly as PDO::PARAM_BOOL. With native prepared
+        // statements (PDO::ATTR_EMULATE_PREPARES = false), passing a plain PHP
+        // bool through the execute([...]) array shorthand gets sent to Postgres
+        // as an empty string and fails with "invalid input syntax for type
+        // boolean" — bindValue() with an explicit type avoids that.
+        $stmt->bindValue(':s', $staffId, $staffId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->bindValue(':a', $action, PDO::PARAM_STR);
+        $stmt->bindValue(':ok', $authorized, PDO::PARAM_BOOL);
+        $stmt->execute();
     } catch (Throwable $e) {
         // Do not block the request if logging fails; the DB may not be migrated yet.
     }

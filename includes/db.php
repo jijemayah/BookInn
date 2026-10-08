@@ -86,6 +86,15 @@ function getDbConnection(): PDO {
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
+                // Postgres folds unquoted identifiers to lowercase, so a query
+                // like "SELECT STAFF_ID" actually returns the key "staff_id".
+                // The app's PHP code (auth.php, every page controller) accesses
+                // fetched rows using UPPERCASE keys (a holdover from MySQL,
+                // which preserves case as written). Forcing CASE_UPPER here
+                // normalizes every fetched column key to uppercase so existing
+                // code keeps working unchanged, without needing to quote every
+                // identifier in every SQL string across the codebase.
+                PDO::ATTR_CASE                => PDO::CASE_UPPER,
             ]);
         } catch (PDOException $e) {
             http_response_code(500);
