@@ -1,0 +1,13 @@
+# OS
+Thumbs.db
+.DS_Store
+
+# VS Code (may contain local DB connection details)
+.vscode/
+
+# PHP
+*.log
+
+# Environment-specific overrides (if you add one later)
+.env
+.env.local
