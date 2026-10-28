@@ -1,0 +1,91 @@
+:root {
+  --bg: #f6f7f9;
+  --fg: #1c2330;
+  --muted: #5a6475;
+  --card: #ffffff;
+  --border: #d5dae2;
+  --brand: #1f4e79;
+  --brand-fg: #ffffff;
+  --danger: #b42318;
+  --ok: #1a7f37;
+  --focus: #f5a623;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.5;
+}
+a { color: var(--brand); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.skip-link { position: absolute; left: -999px; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.skip-link:focus { left: 8px; top: 8px; background: var(--card); padding: 8px; z-index: 10; }
+
+.shell { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
+.sidebar { background: var(--brand); color: var(--brand-fg); padding: 16px; }
+.sidebar a { color: var(--brand-fg); text-decoration: none; display: block; padding: 6px 8px; border-radius: 4px; }
+.sidebar a:hover, .sidebar a[aria-current="page"] { background: rgba(255, 255, 255, 0.15); }
+.sidebar ul { list-style: none; margin: 0 0 16px; padding: 0; }
+.sidebar .brand { font-size: 1.3rem; font-weight: 700; margin: 0 0 16px; }
+.sidebar .who { font-size: 0.85rem; opacity: 0.9; margin-bottom: 16px; }
+.sidebar button { width: 100%; background: transparent; color: var(--brand-fg); border: 1px solid rgba(255,255,255,.5); }
+main { padding: 24px 32px; max-width: 1200px; }
+
+h1 { margin-top: 0; font-size: 1.6rem; }
+.muted { color: var(--muted); }
+.toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.toolbar form { display: flex; gap: 8px; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.grid a.card { text-decoration: none; color: inherit; margin: 0; }
+.grid .count { font-size: 1.8rem; font-weight: 700; color: var(--brand); }
+
+table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 0.92rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { background: #eef1f5; font-weight: 600; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+
+dl.details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }
+dl.details dt { font-weight: 600; color: var(--muted); }
+dl.details dd { margin: 0; }
+
+.form { display: grid; gap: 14px; max-width: 520px; }
+.field { display: grid; gap: 4px; }
+.field-inline { grid-template-columns: auto 1fr; align-items: center; }
+label { font-weight: 600; font-size: 0.92rem; }
+input, select {
+  font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--fg);
+}
+input[type="checkbox"] { width: 20px; height: 20px; }
+input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--danger); }
+.readonly { padding: 8px 0; }
+.help { color: var(--muted); }
+.field-error { color: var(--danger); font-weight: 600; }
+
+button, .button {
+  font: inherit; cursor: pointer; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--brand);
+  background: var(--brand); color: var(--brand-fg); text-decoration: none; display: inline-block;
+}
+button:disabled { opacity: 0.6; cursor: progress; }
+button.danger { background: var(--danger); border-color: var(--danger); }
+.button.secondary { background: transparent; color: var(--brand); }
+
+.alert { padding: 10px 14px; border-radius: 6px; margin: 0 0 12px; }
+.alert.error { background: #fdecea; color: var(--danger); border: 1px solid #f5c2bd; }
+.alert.ok { background: #e7f5ec; color: var(--ok); border: 1px solid #b7e1c4; }
+
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: #eef1f5; }
+.login { max-width: 380px; margin: 10vh auto; }
+
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; }
+  main { padding: 16px; }
+}
