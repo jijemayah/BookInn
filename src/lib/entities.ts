@@ -103,7 +103,8 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     labelSql: "t.cus_name || ' <' || t.cus_email || '>'",
     read: ALL,
     write: [FD, DBA],
-    description: "Guest records (FR-07 – FR-09).",
+    description:
+      "Guest records (FR-07 – FR-09). Note: automatic deletion after 1 year of inactivity (SRS §3.3) is not yet implemented; customers can only be deleted manually when no other records reference them.",
     fields: [
       { name: "cus_name", label: "Full name", type: "text", required: true, max: 100 },
       { name: "cus_email", label: "Email", type: "email", required: true, max: 100 },

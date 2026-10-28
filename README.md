@@ -2,6 +2,8 @@
 
 Staff web app implementing the 11 entities of the BookInn SRS final 3NF schema (§4.2 3NF, §4.4 Data Dictionary) with create/read/update/delete, secure staff login, RBAC, an audit trail, and safe-delete guards.
 
+> **⚠ Not yet implemented — customer data retention (SRS §3.3):** automatic deletion of customer records after 1 year of inactivity is **not implemented in Phase 1**. No scheduled jobs, triggers or cascades delete customers. Staff can delete a customer by hand only when no reservations, payments, loyalty account or other records reference it. This is a temporary Phase 1 limitation, not a change to the SRS, and is planned for a later phase.
+
 Next.js is the project's only stack; the earlier PHP prototype has been removed (it remains in git history). All tables live in a dedicated Postgres schema, `bookinn`, so they never collide with the old PHP tables that may still exist in Supabase's `public` schema.
 
 ## Quick start
