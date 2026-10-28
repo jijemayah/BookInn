@@ -25,15 +25,31 @@ The CLI scripts read `.env.local` first, then `.env` (your existing `SUPABASE_DB
 | `npm run db:migrate` | Applies `db/migrations/*.sql` once each (tracked in `bookinn.schema_migrations`) |
 | `npm run db:seed` | Seeds only when `bookinn.staff` is empty. It never overwrites data. |
 
-### Seed logins
+### Mock logins (for trying the prototype)
 
-| Username | Role |
+> ⚠ **Mock data only.** Anyone who reads this README can sign in to the deployed app with these accounts, including as administrator. Change the passwords (under "My account") or reseed the database before using the app with real guest data.
+
+| Username | Role | Password | What to try |
+|---|---|---|---|
+| `ADMIN` | Database Administrator | `BkCO6QLnD4XtgaNTnw#7` | Everything, including Staff and Audit trail |
+| `KDPALVARADO` | Front Desk | `BkpDsxHaxKfF70WMZR#7` | Customers, rooms, reservations, cancellations (Staff page is blocked) |
+| `JESMEDEL` | Finance | `BkRZnH0AxEWDtb9WZl#7` | Payments and receipts |
+
+Usernames aren't case-sensitive. These passwords match the Supabase database as it is currently seeded. Re-running `npm run db:seed` on an empty database generates new random passwords, unless you set `SEED_ADMIN_PASSWORD`, `SEED_FRONTDESK_PASSWORD` and `SEED_FINANCE_PASSWORD` to the values above.
+
+### Mock data (SRS §4.2 3NF sample, corrected)
+
+| Table | Records |
 |---|---|
-| `ADMIN` | Database Administrator |
-| `KDPALVARADO` | Front Desk |
-| `JESMEDEL` | Finance |
-
-Passwords come from `SEED_*_PASSWORD` env vars. If those are unset, random passwords that meet the policy are generated and printed once. No passwords are stored in source code.
+| Customers | 1001 JUAN DELA CRUZ (jdcruz@gmail.com, 09061234567); 1002 KEIZZY ALVARADO (kdpalvarado@gmail.com, 09761234567) |
+| Loyalty accounts | 5001 → customer 1001, 240 pts; 5002 → customer 1002, 250 pts |
+| Room types | RT01 Standard, Ocean View, ₱1500/night; RT02 Deluxe, Pool View, ₱3000/night |
+| Rooms | 205, 206, 406 (RT01); 108 (RT02) |
+| Reservations | 1001: customer 1001, rooms 205 + 206, Jun 25–27 2026, Completed<br>1002: customer 1002, room 108, Aug 8–10 2026, Completed<br>1003: customer 1001, room 406, Sep 25–29 2026, Cancelled |
+| Payments | 1001: Digital Wallet, ₱6000, +120 pts<br>1002: Cash, ₱5280, 12% Discount (−100 pts)<br>1003: Digital Wallet, ₱6000, +120 pts |
+| Receipts | 1001, 1002, 1003 (one per payment) |
+| Cancellations | 9001: reservation 1003, cancelled by Customer on Sep 15 2026 |
+| Audit trail | The 2 SRS sample entries; every change made in the app adds more |
 
 ## Deploying to Vercel
 
