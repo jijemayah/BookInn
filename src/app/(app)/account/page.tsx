@@ -1,28 +1,31 @@
 import { requireStaff } from "@/lib/session";
-import { changePasswordAction } from "@/app/actions";
-import { PasswordForm } from "@/components/forms";
+import { changePasswordAction, updateNameAction } from "@/app/actions";
+import { NameForm, PasswordForm } from "@/components/forms";
+import { PageHeader, Section } from "@/components/ui";
 import { PASSWORD_RULE } from "@/lib/validation";
 
 export default async function AccountPage() {
   const staff = await requireStaff();
   return (
     <>
-      <h1>My account</h1>
-      <section className="card">
+      <PageHeader title="Account settings" description="Manage your own account (FR-03). Only the Database Administrator can change usernames, roles or account status." />
+      <Section title="Your account">
         <dl className="details">
           <dt>Username</dt>
           <dd>{staff.username}</dd>
-          <dt>Name</dt>
-          <dd>{staff.name}</dd>
           <dt>Role</dt>
           <dd>{staff.role}</dd>
+          <dt>Staff ID</dt>
+          <dd>{staff.staffId}</dd>
         </dl>
-      </section>
-      <section className="card" aria-labelledby="pw-h">
-        <h2 id="pw-h">Change password</h2>
-        <p className="muted">{PASSWORD_RULE}</p>
+      </Section>
+      <Section title="Display name">
+        <NameForm action={updateNameAction} name={staff.name} />
+      </Section>
+      <Section title="Change password">
+        <p className="mb-4 text-sm text-muted">{PASSWORD_RULE}</p>
         <PasswordForm action={changePasswordAction} />
-      </section>
+      </Section>
     </>
   );
 }

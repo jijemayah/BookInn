@@ -1,22 +1,30 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db/pg";
-import { canWrite } from "@/lib/entities";
+import { can } from "@/lib/entities";
 import { buildFormFields } from "@/lib/form-fields";
 import { createAction } from "@/app/actions";
 import { EntityForm } from "@/components/forms";
-import { Forbidden, loadEntityPage } from "../shared";
+import { Alert, PageHeader } from "@/components/ui";
+import { loadEntityPage } from "../shared";
 
 export default async function NewPage({ params }: PageProps<"/[entity]/new">) {
   const { entity } = await params;
   const { e, actor } = await loadEntityPage(entity);
-  if (!canWrite(actor.role, e)) return <Forbidden e={e} />;
+  if (e.key === "reservation") redirect("/book");
+  if (!can(actor.role, e, "create"))
+    return (
+      <>
+        <PageHeader title={`New ${e.label.toLowerCase()}`} back={{ href: `/${e.key}`, label: e.plural }} />
+        <Alert kind="error">Your role ({actor.role}) cannot create {e.plural.toLowerCase()}.</Alert>
+      </>
+    );
   const fields = await buildFormFields(getDb(), actor, e, "create");
   return (
     <>
-      <p>
-        <Link href={`/${e.key}`}>← {e.plural}</Link>
-      </p>
-      <h1>New {e.label.toLowerCase()}</h1>
+      <PageHeader title={`New ${e.label.toLowerCase()}`} description={e.description} back={{ href: `/${e.key}`, label: e.plural }} />
+      {e.bookingFlow && (
+        <Alert kind="warn">Administrator correction form. Normal bookings, payments and receipts are created on the New booking form.</Alert>
+      )}
       <div className="card">
         <EntityForm action={createAction.bind(null, e.key)} fields={fields} submitLabel={`Create ${e.label.toLowerCase()}`} />
       </div>

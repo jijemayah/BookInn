@@ -1,91 +1,68 @@
-:root {
-  --bg: #f6f7f9;
-  --fg: #1c2330;
-  --muted: #5a6475;
-  --card: #ffffff;
-  --border: #d5dae2;
-  --brand: #1f4e79;
-  --brand-fg: #ffffff;
-  --danger: #b42318;
-  --ok: #1a7f37;
-  --focus: #f5a623;
+@import "tailwindcss";
+
+/*
+ * BookInn palette (the nine supplied colours) as design tokens.
+ * Use classes like bg-brand-50, text-brand-800, border-brand-200.
+ * Contrast notes (white text): brand-600 3.2:1 and brand-700 4.4:1 fail WCAG AA
+ * for normal text, so filled buttons use brand-800 (6.4:1) / brand-900 on hover.
+ */
+@theme {
+  --color-brand-50: #fafcf8;  /* page background */
+  --color-brand-100: #e8f5e5; /* secondary background, subtle surfaces */
+  --color-brand-200: #caecbf; /* selected items, light highlights */
+  --color-brand-300: #a3dc9a; /* secondary accents */
+  --color-brand-400: #73c377; /* interactive highlights */
+  --color-brand-600: #3aa358; /* primary accent, focus rings */
+  --color-brand-700: #208a46; /* hover states, stronger accents */
+  --color-brand-800: #026e2f; /* headings, navigation, filled buttons */
+  --color-brand-900: #004318; /* deepest green, high contrast */
+
+  --color-ink: #1f2a22;       /* body text */
+  --color-muted: #55635a;     /* secondary text (6.1:1 on brand-50) */
+  --color-line: #d9e6d5;      /* borders */
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-warn: #8a5a00;
+  --color-warn-soft: #fff4dc;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-body {
-  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: var(--bg);
-  color: var(--fg);
-  line-height: 1.5;
+@layer base {
+  html { color-scheme: light; }
+  body { @apply bg-brand-50 text-ink antialiased; }
+  h1 { @apply text-2xl font-semibold text-brand-900; }
+  h2 { @apply text-lg font-semibold text-brand-800; }
+  a { @apply text-brand-800 underline-offset-2 hover:underline; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-brand-600; }
+  table { @apply w-full border-collapse text-sm; }
+  th { @apply bg-brand-100 px-3 py-2 text-left font-semibold text-brand-900; }
+  td { @apply border-t border-line px-3 py-2 align-top; }
+  tbody tr:hover { @apply bg-brand-50; }
+  label { @apply text-sm font-medium text-ink; }
+  input, select, textarea {
+    @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink placeholder:text-muted
+           focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200;
+  }
+  input[type="checkbox"] { @apply h-4 w-4 accent-brand-800; }
+  input[aria-invalid="true"], select[aria-invalid="true"] { @apply border-danger ring-danger-soft; }
+  dl.details { @apply grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm; }
+  dl.details dt { @apply font-medium text-muted; }
+  dl.details dd { @apply m-0; }
 }
-a { color: var(--brand); }
-:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
-.skip-link { position: absolute; left: -999px; }
-.visually-hidden {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-.skip-link:focus { left: 8px; top: 8px; background: var(--card); padding: 8px; z-index: 10; }
-
-.shell { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
-.sidebar { background: var(--brand); color: var(--brand-fg); padding: 16px; }
-.sidebar a { color: var(--brand-fg); text-decoration: none; display: block; padding: 6px 8px; border-radius: 4px; }
-.sidebar a:hover, .sidebar a[aria-current="page"] { background: rgba(255, 255, 255, 0.15); }
-.sidebar ul { list-style: none; margin: 0 0 16px; padding: 0; }
-.sidebar .brand { font-size: 1.3rem; font-weight: 700; margin: 0 0 16px; }
-.sidebar .who { font-size: 0.85rem; opacity: 0.9; margin-bottom: 16px; }
-.sidebar button { width: 100%; background: transparent; color: var(--brand-fg); border: 1px solid rgba(255,255,255,.5); }
-main { padding: 24px 32px; max-width: 1200px; }
-
-h1 { margin-top: 0; font-size: 1.6rem; }
-.muted { color: var(--muted); }
-.toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
-.toolbar form { display: flex; gap: 8px; }
-
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-.grid a.card { text-decoration: none; color: inherit; margin: 0; }
-.grid .count { font-size: 1.8rem; font-weight: 700; color: var(--brand); }
-
-table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 0.92rem; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-th { background: #eef1f5; font-weight: 600; }
-.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
-
-dl.details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }
-dl.details dt { font-weight: 600; color: var(--muted); }
-dl.details dd { margin: 0; }
-
-.form { display: grid; gap: 14px; max-width: 520px; }
-.field { display: grid; gap: 4px; }
-.field-inline { grid-template-columns: auto 1fr; align-items: center; }
-label { font-weight: 600; font-size: 0.92rem; }
-input, select {
-  font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--fg);
-}
-input[type="checkbox"] { width: 20px; height: 20px; }
-input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--danger); }
-.readonly { padding: 8px 0; }
-.help { color: var(--muted); }
-.field-error { color: var(--danger); font-weight: 600; }
-
-button, .button {
-  font: inherit; cursor: pointer; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--brand);
-  background: var(--brand); color: var(--brand-fg); text-decoration: none; display: inline-block;
-}
-button:disabled { opacity: 0.6; cursor: progress; }
-button.danger { background: var(--danger); border-color: var(--danger); }
-.button.secondary { background: transparent; color: var(--brand); }
-
-.alert { padding: 10px 14px; border-radius: 6px; margin: 0 0 12px; }
-.alert.error { background: #fdecea; color: var(--danger); border: 1px solid #f5c2bd; }
-.alert.ok { background: #e7f5ec; color: var(--ok); border: 1px solid #b7e1c4; }
-
-.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: #eef1f5; }
-.login { max-width: 380px; margin: 10vh auto; }
-
-@media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
-  main { padding: 16px; }
+@layer components {
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent px-4 py-2 text-sm font-medium no-underline transition-colors
+           disabled:cursor-not-allowed disabled:opacity-60 hover:no-underline;
+  }
+  .btn-primary { @apply bg-brand-800 text-white hover:bg-brand-900; }
+  .btn-secondary { @apply border-brand-300 bg-white text-brand-800 hover:bg-brand-100; }
+  .btn-danger { @apply bg-danger text-white hover:bg-[#8f1c13]; }
+  .btn-ghost { @apply text-brand-800 hover:bg-brand-100; }
+  .card { @apply rounded-xl border border-line bg-white p-5 shadow-sm; }
+  .badge { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .help { @apply text-xs text-muted; }
+  .field-error { @apply text-xs font-medium text-danger; }
+  .sr-only-focusable { @apply sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:p-2; }
 }

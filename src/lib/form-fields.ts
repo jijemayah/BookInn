@@ -1,16 +1,18 @@
 import type { Db, Row } from "./db/types";
 import type { Actor } from "./audit";
-import { ENTITIES, canRead, type EntityDef } from "./entities";
+import { ENTITIES, canRead, writableFields, type EntityDef } from "./entities";
 import { refOptions } from "./crud";
 import type { FormField } from "@/components/forms";
 import type { Mode } from "./validation";
 
-/** Converts entity definitions into serialisable props for the client form. */
+/** Converts entity definitions into serialisable props for the client form, for this role. */
 export async function buildFormFields(db: Db, actor: Actor, e: EntityDef, mode: Mode, row?: Row): Promise<FormField[]> {
+  const writable = new Set(writableFields(e, actor.role, mode).map((f) => f.name));
   const out: FormField[] = [];
   for (const f of e.fields) {
     if (f.computed) continue;
-    if (mode === "create" && f.onCreate === false) continue;
+    const immutable = mode === "update" && f.onUpdate === false;
+    if (!writable.has(f.name) && !immutable) continue; // fields this role can't set are not shown
     let options: FormField["options"];
     if (f.type === "enum") {
       const opts = (mode === "update" && f.updateOptions) || f.options || [];
@@ -29,7 +31,7 @@ export async function buildFormFields(db: Db, actor: Actor, e: EntityDef, mode: 
       min: f.min,
       help: f.type === "text" && f.patternHint ? `${f.patternHint}${f.help ? `. ${f.help}` : ""}` : f.help,
       options,
-      readOnly: mode === "update" && f.onUpdate === false,
+      readOnly: immutable,
       value: f.type === "password" ? "" : current !== undefined && current !== null ? String(current) : f.defaultValue,
     });
   }

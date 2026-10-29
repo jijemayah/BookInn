@@ -6,8 +6,7 @@ import type { Role } from "./entities";
 import { AppError } from "./errors";
 import { isStrongPassword, PASSWORD_RULE } from "./validation";
 import { BCRYPT_COST } from "./rules";
-import { writeAudit } from "./audit";
-import { ENTITIES } from "./entities";
+import { setActor } from "./audit";
 
 export interface StaffSession {
   staffId: number;
@@ -21,20 +20,20 @@ let dummyHash: string | undefined;
 const getDummyHash = () => (dummyHash ??= bcrypt.hashSync("not-a-real-password", BCRYPT_COST));
 
 export async function verifyCredentials(db: Db, username: string, password: string): Promise<StaffSession | null> {
-  const r = await db.query<{ staff_id: number; pass: string; name: string; role: Role; is_active: boolean; u_name: string }>(
+  const r = await db.query<{ staff_id: number; pass: string; name: string; role: Role; is_active: "Yes" | "No"; u_name: string }>(
     "SELECT staff_id, pass, name, role, is_active, u_name FROM bookinn.staff WHERE lower(u_name) = lower($1)",
     [username.trim()],
   );
   const s = r.rows[0];
   const ok = await bcrypt.compare(password, s?.pass ?? getDummyHash());
-  if (!s || !ok || !s.is_active) return null; // deactivated accounts cannot log in (SRS §3.3)
+  if (!s || !ok || s.is_active !== "Yes") return null; // deactivated accounts cannot log in (SRS §3.3)
   return { staffId: s.staff_id, role: s.role, name: s.name, username: s.u_name };
 }
 
 /** Re-reads the staff row so deactivation / role changes take effect on the next request. */
 export async function loadActiveStaff(db: Db, staffId: number): Promise<StaffSession | null> {
   const r = await db.query<{ staff_id: number; name: string; role: Role; u_name: string }>(
-    "SELECT staff_id, name, role, u_name FROM bookinn.staff WHERE staff_id = $1 AND is_active",
+    "SELECT staff_id, name, role, u_name FROM bookinn.staff WHERE staff_id = $1 AND is_active = 'Yes'",
     [staffId],
   );
   const s = r.rows[0];
@@ -45,11 +44,21 @@ export async function loadActiveStaff(db: Db, staffId: number): Promise<StaffSes
 export async function changeOwnPassword(db: Db, staffId: number, current: string, next: string) {
   if (!isStrongPassword(next)) throw new AppError("validation", PASSWORD_RULE, { new_password: PASSWORD_RULE });
   await db.tx(async (t) => {
+    await setActor(t, { staffId });
     const r = await t.query<{ pass: string }>("SELECT pass FROM bookinn.staff WHERE staff_id = $1 FOR UPDATE", [staffId]);
     if (!r.rows[0] || !(await bcrypt.compare(current, r.rows[0].pass)))
       throw new AppError("validation", "Current password is incorrect.", { current_password: "Incorrect." });
     await t.query("UPDATE bookinn.staff SET pass = $2 WHERE staff_id = $1", [staffId, await bcrypt.hash(next, BCRYPT_COST)]);
-    await writeAudit(t, { staffId }, "UPDATE", ENTITIES.staff, { staff_id: staffId }, "PASS=[changed]", "PASS=[changed]");
+  });
+}
+
+/** FR-03: staff update their own display name. Username, role and status are administrator-only. */
+export async function updateOwnName(db: Db, staffId: number, name: string) {
+  const n = name.trim();
+  if (n.length < 1 || n.length > 100) throw new AppError("validation", "Enter your full name (max 100 characters).", { name: "Required." });
+  await db.tx(async (t) => {
+    await setActor(t, { staffId });
+    await t.query("UPDATE bookinn.staff SET name = $2 WHERE staff_id = $1", [staffId, n]);
   });
 }
 

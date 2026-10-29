@@ -1,15 +1,17 @@
 "use server";
 /**
  * Server Actions are public HTTP endpoints: every action re-authenticates the
- * caller and the CRUD layer re-checks RBAC, regardless of what the UI showed.
+ * caller, and the library layer re-checks RBAC, regardless of what the UI showed.
  */
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db/pg";
 import { createRow, deleteRow, updateRow } from "@/lib/crud";
-import { ENTITIES, isEntityKey } from "@/lib/entities";
-import { isAppError } from "@/lib/errors";
-import { changeOwnPassword, verifyCredentials } from "@/lib/staff-auth";
+import { cancelReservation, createBooking, quoteBooking, type BookingInput, type Quote } from "@/lib/booking";
+import { runMaintenance, type MaintenanceResult } from "@/lib/maintenance";
+import { DBA, ENTITIES, isEntityKey } from "@/lib/entities";
+import { AppError, isAppError } from "@/lib/errors";
+import { changeOwnPassword, updateOwnName, verifyCredentials } from "@/lib/staff-auth";
 import { endSession, getCurrentStaff, startSession } from "@/lib/session";
 import type { FormInput } from "@/lib/validation";
 
@@ -77,7 +79,19 @@ export async function changePasswordAction(_prev: FormState, fd: FormData): Prom
   return { ok: "Password updated." };
 }
 
-// ---------------------------------------------------------------- CRUD
+export async function updateNameAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const a = await actor();
+  const name = String(fd.get("name") ?? "");
+  try {
+    await updateOwnName(getDb(), a.staffId, name);
+  } catch (err) {
+    return fail(err, { name });
+  }
+  revalidatePath("/", "layout");
+  return { ok: "Name updated.", values: { name: name.trim() } };
+}
+
+// ---------------------------------------------------------------- generic CRUD
 export async function createAction(entity: string, _prev: FormState, fd: FormData): Promise<FormState> {
   if (!isEntityKey(entity)) return { error: "Unknown entity." };
   const a = await actor();
@@ -116,4 +130,79 @@ export async function deleteAction(entity: string, id: string, _prev: FormState)
   }
   revalidatePath(`/${entity}`);
   redirect(`/${entity}?saved=deleted`);
+}
+
+// ---------------------------------------------------------------- bookings
+export type BookingState = FormState & { quote?: Quote; rooms?: string[] };
+
+function bookingInput(fd: FormData): { input: BookingInput; values: Record<string, string>; rooms: string[] } {
+  const values = echo(formToInput(fd));
+  const rooms = fd.getAll("room_no").map(String).filter(Boolean);
+  const checkIn = values.check_in_date ?? "";
+  const checkOut = values.check_out_date ?? "";
+  return {
+    input: {
+      cus_id: values.cus_id ?? "",
+      discount_type: values.discount_type || "NONE",
+      stays: rooms.map((room_no) => ({ room_no, check_in_date: checkIn, check_out_date: checkOut })),
+      pay_method: values.pay_method,
+      pay_amt: values.pay_amt,
+    },
+    values,
+    rooms,
+  };
+}
+
+/** One form, two steps: "review" prices the booking; "confirm" saves it with the payment. */
+export async function bookingAction(_prev: BookingState, fd: FormData): Promise<BookingState> {
+  const a = await actor();
+  const { input, values, rooms } = bookingInput(fd);
+  const intent = String(fd.get("$intent") ?? "review");
+  if (intent === "edit") return { values, rooms };
+  const db = getDb();
+  if (intent === "review") {
+    try {
+      const quote = await quoteBooking(db, a, input);
+      return { quote, values, rooms };
+    } catch (err) {
+      return { ...fail(err, values), rooms };
+    }
+  }
+  let resId: number;
+  try {
+    resId = (await createBooking(db, a, input)).resId;
+  } catch (err) {
+    // Re-price so the summary stays visible next to the error when possible.
+    const quote = await quoteBooking(db, a, input).catch(() => undefined);
+    return { ...fail(err, values), quote, rooms };
+  }
+  revalidatePath("/reservation");
+  redirect(`/reservation/${resId}?saved=booked`);
+}
+
+export async function cancelReservationAction(resId: string, _prev: FormState): Promise<FormState> {
+  const a = await actor();
+  try {
+    await cancelReservation(getDb(), a, resId);
+  } catch (err) {
+    return fail(err, {});
+  }
+  revalidatePath("/reservation");
+  redirect(`/reservation/${encodeURIComponent(resId)}?saved=cancelled`);
+}
+
+// ---------------------------------------------------------------- maintenance
+export async function runMaintenanceAction(_prev: FormState & { result?: MaintenanceResult }) {
+  const a = await actor();
+  try {
+    if (a.role !== DBA) throw new AppError("forbidden", "Only the Database Administrator can run maintenance.");
+    const result = await runMaintenance(getDb(), { staffId: a.staffId });
+    revalidatePath("/", "layout");
+    return {
+      ok: `Maintenance for ${result.today}: ${result.completed} reservation(s) marked Completed, ${result.purged} expired reservation(s) deleted.`,
+      result,
+    };
+  } catch (err) {
+    return fail(err, {});
+  }
 }

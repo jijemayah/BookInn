@@ -1,153 +1,144 @@
-# BookInn — Phase 1 CRUD prototype (Next.js + TypeScript + Supabase Postgres)
+# BookInn — hotel reservation system (Next.js + TypeScript + Supabase Postgres)
 
-Staff web app implementing the 11 entities of the BookInn SRS final 3NF schema (§4.2 3NF, §4.4 Data Dictionary) with create/read/update/delete, secure staff login, RBAC, an audit trail, and safe-delete guards.
+Staff web app for the BookInn SRS (revision of 29 Oct 2026): the 11-table 3NF schema, role-based access for
+Front Desk, Finance and the Database Administrator, a booking form that records the reservation and its full
+payment together, loyalty points and discounts, cancellations, a database-written audit trail, and the daily
+completion and one-year retention jobs.
 
-> **⚠ Not yet implemented — customer data retention (SRS §3.3):** automatic deletion of customer records after 1 year of inactivity is **not implemented in Phase 1**. No scheduled jobs, triggers or cascades delete customers. Staff can delete a customer by hand only when no reservations, payments, loyalty account or other records reference it. This is a temporary Phase 1 limitation, not a change to the SRS, and is planned for a later phase.
+- **SRS conflicts, decisions and assumptions:** [`docs/SRS_AUDIT.md`](docs/SRS_AUDIT.md)
+- **Requirement → implementation → test map:** [`docs/REQUIREMENTS_CHECKLIST.md`](docs/REQUIREMENTS_CHECKLIST.md)
 
-Next.js is the project's only stack; the earlier PHP prototype has been removed (it remains in git history). All tables live in a dedicated Postgres schema, `bookinn`, so they never collide with the old PHP tables that may still exist in Supabase's `public` schema.
+BookInn keeps **payment records**; it does not process card, bank or e-wallet transactions. Receipt emails are
+**not implemented** (no email provider is configured); receipts can be viewed and printed.
 
 ## Quick start
 
 ```cmd
 npm install
-copy .env.example .env.local      &:: fill in DB credentials + SESSION_SECRET
-npm run db:migrate                &:: creates schema bookinn and the 11 tables
-npm run db:seed                   &:: corrected SRS sample data; prints initial staff passwords once
+copy .env.example .env.local      &:: fill in DB credentials, SESSION_SECRET and CRON_SECRET
+npm run db:migrate                &:: creates/updates schema bookinn
+npm run db:seed                   &:: SRS sample data; prints initial staff passwords once
 npm run dev                       &:: http://localhost:3000
 ```
 
-The CLI scripts read `.env.local` first, then `.env` (your existing `SUPABASE_DB_*` variables work as-is).
+The CLI scripts read `.env.local` first, then `.env`.
 
 | Script | Purpose |
 |---|---|
-| `npm test` | 32 Vitest tests against a real in-process Postgres (PGlite) using the real migrations. No Supabase needed. |
+| `npm test` | 59 Vitest tests against a real in-process Postgres (PGlite) using the real migrations. No Supabase needed. |
 | `npm run lint` / `npm run typecheck` / `npm run build` | Static checks and production build |
 | `npm run db:migrate` | Applies `db/migrations/*.sql` once each (tracked in `bookinn.schema_migrations`) |
-| `npm run db:seed` | Seeds only when `bookinn.staff` is empty. It never overwrites data. |
+| `npm run db:seed` | Seeds only when `bookinn.staff` is empty; never overwrites data. To reseed a dev database, drop schema `bookinn` and migrate again. |
 
-### Mock logins (for trying the prototype)
+## Roles (SRS §3.3 permission table)
 
-> ⚠ **Mock data only.** Anyone who reads this README can sign in to the deployed app with these accounts, including as administrator. Change the passwords (under "My account") or reseed the database before using the app with real guest data.
-
-| Username | Role | Password | What to try |
+| Data | Front Desk | Finance | Database Administrator |
 |---|---|---|---|
-| `ADMIN` | Database Administrator | `BkCO6QLnD4XtgaNTnw#7` | Everything, including Staff and Audit trail |
-| `KDPALVARADO` | Front Desk | `BkpDsxHaxKfF70WMZR#7` | Customers, rooms, reservations, cancellations (Staff page is blocked) |
-| `JESMEDEL` | Finance | `BkRZnH0AxEWDtb9WZl#7` | Payments and receipts |
+| Customers | Create, read, update | Read | All (delete only without dependents) |
+| Loyalty accounts | Open (0 pts), read | Read | All, including point corrections |
+| Rooms, room types | Read | Read | All |
+| Reservations, reserved rooms | Book (with payment), read, cancel | Read | All; corrections are audited |
+| Payments, receipts | Recorded with the booking, read | Read | All; corrections are audited |
+| Cancellations | Create, read | Read | All |
+| Staff | Own name and password | Own name and password | All |
+| Audit trail | — | — | Read only |
 
-Usernames aren't case-sensitive. These passwords match the Supabase database as it is currently seeded. Re-running `npm run db:seed` on an empty database generates new random passwords, unless you set `SEED_ADMIN_PASSWORD`, `SEED_FRONTDESK_PASSWORD` and `SEED_FINANCE_PASSWORD` to the values above.
+Every rule is enforced on the server (and by database constraints and triggers), not only by hiding buttons.
 
-### Mock data (SRS §4.2 3NF sample, corrected)
+## How a booking works
+
+1. Front Desk opens **New booking**, picks an existing guest, the dates, one or more rooms and an optional loyalty discount.
+2. **Review booking**: the server checks availability and computes the amount due from `ROOM_DETAILS.ROOM_PRICE × nights`,
+   minus the discount (12% of the total for 100 pts, or one night of the most expensive room for 250 pts, never below ₱0).
+3. Front Desk collects the money and enters the method and the amount received. It must equal the amount due.
+4. **Confirm** saves, in one transaction: the reservation (Booked), its reserved rooms, the payment, the receipt and the
+   loyalty balance change (earn = amount ÷ 50 with an account, or spend for a discount, never both).
+5. After that, only the status changes: Front Desk can **cancel** (no fee, no refund, points stay final), and the daily job
+   marks it **Completed** the day after the latest check-out. No-shows stay Booked. Only the administrator can correct entries.
+
+## Daily maintenance (SRS §3.3)
+
+`bookinn.complete_reservations(today)` and `bookinn.purge_expired_reservations(today)` (migration 0003) run every day at
+00:05 Asia/Manila via **Vercel Cron** → `GET /api/cron/maintenance` (see `vercel.json`). The endpoint requires
+`Authorization: Bearer <CRON_SECRET>`, which Vercel adds automatically when `CRON_SECRET` is set. The administrator can also
+run it from the dashboard. Retention deletes a reservation with its reserved rooms, payment, receipt and cancellation one year
+after the latest check-out; customers and loyalty accounts are kept. The deletions are logged in the audit trail with
+`STAFF_ID` empty and a "RETENTION" note instead of the deleted data. The job is idempotent.
+
+Alternative without Vercel: schedule the same SQL with Supabase `pg_cron`:
+```sql
+select cron.schedule('bookinn-daily', '5 16 * * *',
+  $$select bookinn.complete_reservations((now() at time zone 'Asia/Manila')::date),
+           bookinn.purge_expired_reservations((now() at time zone 'Asia/Manila')::date)$$);
+```
+
+## Deploying
+
+1. **Back up Supabase first** (Dashboard → Database → Backups, or `pg_dump`). Migration 0003 converts `STAFF.IS_ACTIVE`
+   to Yes/No, removes `CANCELLATION.CANCELLED_BY`, and changes the audit columns. `tests/upgrade.test.ts` checks it on a copy
+   of the old schema with data.
+2. Run `npm run db:migrate` against Supabase from your machine.
+3. In Vercel → Settings → Environment Variables (Production): `SESSION_SECRET`, `CRON_SECRET`, and either `DATABASE_URL` or the
+   `SUPABASE_DB_*` variables. Use the **transaction pooler** (port `6543`, user `postgres.<project-ref>`).
+4. Deploy, then check Vercel → Settings → Cron Jobs shows `/api/cron/maintenance`.
+
+Security notes: only the Next.js server connects to Postgres; no Supabase keys reach the browser. Row Level Security is enabled
+on all 11 tables with no policies, and `anon`/`authenticated` have no access to schema `bookinn`, so the Supabase Data API
+cannot read BookInn data. Do not commit `.env*` files.
+
+### Mock logins (sample data)
+
+| Username | Role | What to try |
+|---|---|---|
+| `ADMIN` | Database Administrator | Staff, audit trail, rooms, corrections, "Run daily maintenance now" |
+| `KDPALVARADO` | Front Desk | New booking, customers, loyalty accounts, cancelling |
+| `JESMEDEL` | Finance | Read-only view of payments, receipts, reservations and the dashboard |
+
+`npm run db:seed` prints random passwords once (or uses `SEED_ADMIN_PASSWORD`, `SEED_FRONTDESK_PASSWORD`,
+`SEED_FINANCE_PASSWORD`). The database that was seeded on 28 Oct still has the passwords from that run. **Change them before
+real guest data is entered.** In that database `JESMEDEL` is active; the old seed did not deactivate anyone.
+
+### Sample data (SRS §4.2 3NF, corrected)
 
 | Table | Records |
 |---|---|
-| Customers | 1001 JUAN DELA CRUZ (jdcruz@gmail.com, 09061234567); 1002 KEIZZY ALVARADO (kdpalvarado@gmail.com, 09761234567) |
-| Loyalty accounts | 5001 → customer 1001, 240 pts; 5002 → customer 1002, 250 pts |
-| Room types | RT01 Standard, Ocean View, ₱1500/night; RT02 Deluxe, Pool View, ₱3000/night |
-| Rooms | 205, 206, 406 (RT01); 108 (RT02) |
-| Reservations | 1001: customer 1001, rooms 205 + 206, Jun 25–27 2026, Completed<br>1002: customer 1002, room 108, Aug 8–10 2026, Completed<br>1003: customer 1001, room 406, Sep 25–29 2026, Cancelled |
-| Payments | 1001: Digital Wallet, ₱6000, +120 pts<br>1002: Cash, ₱5280, 12% Discount (−100 pts)<br>1003: Digital Wallet, ₱6000, +120 pts |
-| Receipts | 1001, 1002, 1003 (one per payment) |
-| Cancellations | 9001: reservation 1003, cancelled by Customer on Sep 15 2026 |
-| Audit trail | The 2 SRS sample entries; every change made in the app adds more |
+| Customers | 1001 JUAN DELA CRUZ; 1002 KEIZZY ALVARADO |
+| Loyalty accounts | 5001 → 1001, 300 pts (120 + 120 + 60); 5002 → 1002, 250 pts |
+| Room types / rooms | RT01 Standard, Ocean View ₱1500; RT02 Deluxe, Pool View ₱3000 · rooms 205, 206, 406 (RT01), 108 (RT02) |
+| Reservations | 1001 rooms 205+206 Jun 25–27 2026, Completed · 1002 room 108 Aug 8–10, Completed · 1003 room 406 Sep 25–29, Cancelled · 1004 room 206 Dec 20–22, Booked (demo) |
+| Payments / receipts | 1001 Digital Wallet ₱6000 +120 · 1002 Cash ₱5280 12% (−100) · 1003 Digital Wallet ₱6000 +120 · 1004 Cash ₱3000 +60 · receipts 1001–1004 |
+| Cancellations | 9001 → reservation 1003, Sep 15 2026 |
+| Audit trail | The 2 SRS sample rows; every later change is added by the database |
 
-## Deploying to Vercel
+Corrections versus the SRS sample (see `src/lib/db/seed.ts` and SRS_AUDIT A16–A17, A21): ISO dates; 5001 = 240 points before the
+demo booking (the 3NF table shows 120); finished stays marked Completed; real bcrypt hashes and an `ADMIN` account; Finance active;
+the sample audit row by Finance is attributed to Front Desk; `CANCELLED_BY` removed; demo reservation 1004 added.
 
-1. Add environment variables: `SESSION_SECRET` (≥ 32 random chars) plus either `DATABASE_URL` or `SUPABASE_DB_HOST/PORT/NAME/USER/PASSWORD/SSLMODE`. Use the Supabase **transaction pooler** (port `6543`, user `postgres.<project-ref>`).
-2. Run `npm run db:migrate` and `npm run db:seed` from your machine against Supabase before the first deploy.
+## Schema (`db/migrations`)
 
-## Schema (db/migrations)
+- `0001_init_schema.sql`: the 11 tables, enums, PK/FK (all `ON DELETE RESTRICT`), uniqueness and CHECK rules.
+- `0002_proposed_staff_is_active.sql`: adds `STAFF.IS_ACTIVE` (approved, now in the SRS dictionary).
+- `0003_srs_revision.sql`: `IS_ACTIVE` Yes/No; `CANCELLED_BY` removed; `AUDIT_TRAIL` (`STAFF_ID` nullable, `REC_ID varchar(50)`,
+  `OLD_DATA`/`NEW_DATA text`); case-insensitive unique usernames; audit triggers on all tables; double-booking trigger with a room
+  row lock; daily job functions; RLS.
 
-`0001_init_schema.sql` follows the data dictionary for every table, column, type, PK and FK.
+## Testing
 
-- **Enums**: native Postgres `ENUM`s with exactly the dictionary's allowed values.
-- **IDs**: `int` identity columns that start at the SRS sample numbering (1001 / 5001 / 9001 / 10001). `ROOM.ROOM_NO` and `ROOM_DETAILS.ROOM_TYPE_ID` are natural keys, as documented.
-- **Foreign keys**: all 9 are `ON DELETE RESTRICT ON UPDATE RESTRICT`. There is **no `ON DELETE CASCADE` anywhere**. A test asserts this.
-- **Constraints**: dictionary notes and §3.3 business rules become DB constraints. These add no new columns:
-  - unique customer email
-  - check-out date after check-in date
-  - unique username
-  - one loyalty account per customer
-  - one payment per reservation (one-time payment rule)
-  - one receipt per payment
-  - one cancellation per reservation
-  - a payment can't both earn and spend points
-  - discount ↔ points: 12% = 100 pts, Free Night = 250 pts
-  - non-negative amounts and points
-  - `STAFF.PASS` must be a bcrypt hash
-- **Audit trail**: `AUDIT_TRAIL` is append-only. A trigger blocks UPDATE and DELETE.
-
-## Proposed structural change (needs your approval)
-
-| # | Change | Why | File |
-|---|---|---|---|
-| P1 | Add `STAFF.IS_ACTIVE boolean NOT NULL DEFAULT true` | FR-02 and §3.3 require deactivating accounts so they can't log in while their history is kept. The dictionary's STAFF table has no column for this, and audit FKs prevent deleting staff. | `0002_proposed_staff_is_active.sql` (additive; rollback is in the file) |
-
-If you reject P1, delete that migration. Login and the Staff form then need the `is_active` references removed.
-
-### Interpretations (no structural change)
-
-- **RBAC roles**: these use the dictionary's values (`Front Desk`, `Finance`, `Database Administrator`). §3.3 also says "Administrator", which I mapped to Database Administrator.
-- **Permissions**:
-  - Front Desk writes Customers, Rooms, Room types, Reservations, Reservation rooms and Cancellations.
-  - Finance writes Payments and Receipts.
-  - Both can create loyalty accounts.
-  - The Administrator can do everything, and is the only role that can see Staff and the Audit trail.
-  - Every role can read the operational tables.
-- **Audit `REC_ID`**: this column is `int`, so audit rows for `ROOM_DETAILS` (which has a `varchar(4)` key) store `NULL` there. The key goes into `OLD_DATA`/`NEW_DATA` instead (e.g. `ROOM_TYPE_ID=RT09; …`).
-- **Cancelling**: you cancel a reservation by creating a `CANCELLATION` record. This sets the reservation to Cancelled and frees its rooms. Deleting the cancellation reinstates the booking, but only if the rooms are still free.
-
-## Sample-data corrections (applied in `src/lib/db/seed.ts`)
-
-| # | SRS sample | Seeded | Reason |
-|---|---|---|---|
-| C1 | Mixed date formats (`06-25-2026`, `9-25-2026`) | ISO `2026-09-25` | Postgres `date` needs one unambiguous format |
-| C2 | `LOYALTY_ACC` 5001 `TOTAL_PTS = 120` | `240` | Customer 1001 earned 120 points on payment 1001 and another 120 on payment 1003. Points stay final even after a cancellation (§3.3), and the UNF table already shows 240. |
-| C3 | Reservations 1001 and 1002 `Booked` | `Completed` | Both stays ended (June 27 and Aug 10) before the SRS date (Sept 2026). Left as Booked, they would still block those rooms. |
-| C4 | `PASS = [HashedPass1]`, and no administrator account | Real bcrypt hashes, plus an `ADMIN` account | Placeholders can't authenticate, and only an administrator can manage staff |
-
-I checked the rest of the sample data and kept it as-is:
-- Payment amounts: 6000 = 2 rooms × 2 nights × ₱1500; 5280 = 6000 − 12%.
-- Points: 6000 / 50 = 120.
-- Receipts match payments 1:1.
-- The cancellation and both audit rows.
-
-## What the app enforces
-
-- **Authentication**:
-  - bcrypt passwords (cost 12) and a policy check (upper, lower, digit, special character, 8–72 characters).
-  - HttpOnly, SameSite=Lax session cookie, signed as an HS256 JWT, valid for 8 hours.
-  - The staff row is re-checked on every request, so deactivating an account or changing its role takes effect immediately.
-  - Login does the same work whether or not the username exists, so response time doesn't reveal valid usernames.
-  - Staff can change their own password (FR-03).
-- **Authorization**: every Server Action re-authenticates the caller, and the CRUD layer re-checks RBAC, whatever the UI showed. SQL identifiers come only from the static entity map, and every value is a bound parameter.
-- **Safe delete**: a delete is refused, with a count of the dependent records, while anything still references the row. The DB `RESTRICT` constraint backs this up.
-- **Admin lockout guard**: an administrator can't delete, demote or deactivate their own account, and the last active administrator can't be removed.
-- **Bookings**:
-  - Double-booking check (FR-15/16): only `Booked` reservations count, the room row is locked to stop races, and back-to-back stays are allowed.
-  - Once a reservation is paid, its rooms and guest are locked (FR-14).
-- **Payments**:
-  - Amount must equal the amount due: overpayment and partial payment are both rejected.
-  - Points earned are computed on the server as floor(amount / 50).
-  - Discounts need a loyalty account with enough points.
-  - A receipt is created automatically.
-- **Audit**: every insert, update and delete writes an `AUDIT_TRAIL` row in the same transaction. Password hashes are never logged.
-
-## Deferred (not in Phase 1)
-
-- **Automatic customer deletion after 1 year of inactivity** (SRS §3.3 Data Retention). This is deliberately not implemented: there are no jobs, triggers or cascades that delete customers. Staff can delete a customer by hand only when no reservations, loyalty account or other records reference it. This is a temporary Phase 1 limitation, and the policy stays in the SRS for a later phase.
-- Deducting and crediting loyalty points against `TOTAL_PTS` when a payment is posted. `PTS_EARN`/`PTS_SPEND` are recorded, but the balance is edited manually for now.
-- Automated no-shows, email receipts and notifications, the online guest booking portal, reports, 1-year history limits, and rate limiting on login.
+`npm test` covers the 25 acceptance cases from the brief plus schema, seed, upgrade and security checks. Before this handoff the
+production build was also smoke-tested over HTTP and in a real browser (Edge) against a local in-memory Postgres: 44/44 checks,
+including a full booking with a 12% discount, a rejected wrong amount, cancellation, role-restricted pages and the cron endpoint.
 
 ## Layout
 
 ```
 db/migrations/        SQL migrations (source of truth for the schema)
+docs/                 SRS audit and requirements checklist
 scripts/              migrate / seed CLIs
-src/lib/entities.ts   11 entity definitions (fields, labels, RBAC) driving all screens
-src/lib/crud.ts       generic RBAC-checked CRUD, delete guard, DB-error mapping
-src/lib/rules.ts      SRS business rules (double booking, payments, cancellations, staff)
-src/lib/staff-auth.ts bcrypt login, session token, password change
-src/app/              Next.js App Router pages and Server Actions
+src/lib/entities.ts   11 entity definitions: fields, labels, permissions
+src/lib/booking.ts    booking + payment + receipt + points in one transaction; cancellation
+src/lib/crud.ts       RBAC-checked generic CRUD, search/sort/pagination, delete guard, DB-error mapping
+src/lib/rules.ts      business rules for administrator corrections and generic forms
+src/lib/maintenance.ts daily completion and retention jobs
+src/app/              Next.js App Router pages, Server Actions, /api/cron/maintenance
 tests/                Vitest suites (PGlite)
 ```

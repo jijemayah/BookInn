@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Row } from "@/lib/db/types";
-import { ENTITIES, canRead, isEntityKey, type EntityDef, type FieldDef } from "@/lib/entities";
+import { ENTITIES, canRead, isEntityKey, type FieldDef } from "@/lib/entities";
 import { requireStaff } from "@/lib/session";
+import { StatusBadge } from "@/components/ui";
 
 /** Resolves the [entity] segment and enforces read permission. */
 export async function loadEntityPage(entityParam: string) {
@@ -12,22 +13,11 @@ export async function loadEntityPage(entityParam: string) {
   return { e, staff, actor, allowed: canRead(staff.role, e) };
 }
 
-export function Forbidden({ e }: { e: EntityDef }) {
-  return (
-    <>
-      <h1>{e.plural}</h1>
-      <p className="alert error" role="alert">
-        Your role does not have access to {e.plural.toLowerCase()}.
-      </p>
-    </>
-  );
-}
-
 export function cell(f: FieldDef, row: Row) {
   const v = row[f.name];
-  if (v === null || v === undefined || v === "") return "—";
+  if (v === null || v === undefined || v === "") return f.name === "staff_id" ? "System" : "—";
   if (f.type === "ref") return String(row[`${f.name}__label`] ?? v);
-  if (f.type === "bool") return v ? "Yes" : "No";
+  if (f.name === "booking_status" || f.name === "is_active") return <StatusBadge value={String(v)} />;
   if (f.type === "money") return `₱${v}`;
   return String(v);
 }
@@ -36,4 +26,6 @@ export const SAVED_MESSAGES: Record<string, string> = {
   created: "Record created.",
   updated: "Changes saved.",
   deleted: "Record deleted.",
+  booked: "Booking confirmed. The payment and receipt were recorded.",
+  cancelled: "Reservation cancelled. Its rooms are free again; the payment and points stay as recorded (no refund).",
 };

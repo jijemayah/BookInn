@@ -33,11 +33,22 @@ export const FRONT_DESK: Actor = { staffId: 1001, role: "Front Desk" };
 export const FINANCE: Actor = { staffId: 1002, role: "Finance" };
 export const ADMIN: Actor = { staffId: 1003, role: "Database Administrator" };
 
-export async function auditFor(db: Db, table: string, recId: number | null) {
-  const r = await db.query(
-    `SELECT action, old_data, new_data, staff_id FROM bookinn.audit_trail
-      WHERE aff_tab = $1 AND rec_id IS NOT DISTINCT FROM $2::int ORDER BY audit_id`,
-    [table, recId],
+/** "Today" for tests, in the hotel time zone (after the seeded pay dates, before booking 1004). */
+export const TODAY = "2026-11-01";
+
+export async function auditFor(db: Db, table: string, recId: string | number) {
+  const r = await db.query<{ action: string; old_data: string | null; new_data: string | null; staff_id: number | null }>(
+    `SELECT action::text, old_data, new_data, staff_id FROM bookinn.audit_trail
+      WHERE aff_tab = $1 AND rec_id = $2 ORDER BY audit_id`,
+    [table, String(recId)],
   );
   return r.rows;
+}
+
+export async function count(db: Db, table: string, where = "true", params: unknown[] = []) {
+  return Number((await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM bookinn.${table} WHERE ${where}`, params)).rows[0].n);
+}
+
+export async function points(db: Db, lylId: number) {
+  return Number((await db.query<{ p: number }>("SELECT total_pts AS p FROM bookinn.loyalty_acc WHERE lyl_id = $1", [lylId])).rows[0].p);
 }

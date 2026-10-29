@@ -5,11 +5,12 @@ import type { FormState } from "@/app/actions";
 export interface FormField {
   name: string;
   label: string;
-  type: "text" | "email" | "int" | "money" | "date" | "enum" | "ref" | "password" | "bool";
+  type: "text" | "email" | "int" | "money" | "date" | "enum" | "ref" | "password";
   required?: boolean;
   max?: number;
   min?: number;
   help?: string;
+  placeholder?: string;
   options?: { value: string; label: string }[];
   /** Shown but not submitted (immutable on edit). */
   readOnly?: boolean;
@@ -18,14 +19,16 @@ export interface FormField {
 
 type Action = (prev: FormState, fd: FormData) => Promise<FormState>;
 
+const PLACEHOLDERS: Partial<Record<FormField["type"], string>> = { money: "e.g. 1500.00", email: "name@example.com", int: "e.g. 205" };
+
 export function EntityForm({ action, fields, submitLabel }: { action: Action; fields: FormField[]; submitLabel: string }) {
   const [state, formAction, pending] = useActionState(action, {});
   const val = (f: FormField) => state.values?.[f.name] ?? f.value ?? "";
 
   return (
-    <form action={formAction} className="form" noValidate>
+    <form action={formAction} className="grid max-w-xl gap-4" noValidate>
       {state.error && (
-        <p className="alert error" role="alert">
+        <p role="alert" className="rounded-md border border-[#f5c2bd] bg-danger-soft px-4 py-3 text-sm text-danger">
           {state.error}
         </p>
       )}
@@ -45,7 +48,7 @@ export function EntityForm({ action, fields, submitLabel }: { action: Action; fi
         let control: React.ReactNode;
         if (f.readOnly) {
           control = (
-            <output id={id} className="readonly">
+            <output id={id} className="block py-2 text-sm">
               {f.options?.find((o) => o.value === f.value)?.label ?? f.value}
             </output>
           );
@@ -60,8 +63,6 @@ export function EntityForm({ action, fields, submitLabel }: { action: Action; fi
               ))}
             </select>
           );
-        } else if (f.type === "bool") {
-          control = <input key={key} {...common} type="checkbox" defaultChecked={val(f) !== "false"} />;
         } else {
           const type =
             f.type === "email" ? "email" : f.type === "date" ? "date" : f.type === "password" ? "password" : f.type === "int" ? "number" : "text";
@@ -75,15 +76,16 @@ export function EntityForm({ action, fields, submitLabel }: { action: Action; fi
               min={f.type === "int" ? f.min : undefined}
               step={f.type === "int" ? 1 : undefined}
               inputMode={f.type === "money" ? "decimal" : undefined}
+              placeholder={f.placeholder ?? PLACEHOLDERS[f.type]}
               autoComplete={f.type === "password" ? "new-password" : "off"}
             />
           );
         }
         return (
-          <div className={`field ${f.type === "bool" ? "field-inline" : ""}`} key={f.name}>
+          <div className="grid gap-1" key={f.name}>
             <label htmlFor={id}>
               {f.label}
-              {f.required && !f.readOnly && <span aria-hidden="true"> *</span>}
+              {f.required && !f.readOnly && <span aria-hidden="true" className="text-danger"> *</span>}
             </label>
             {control}
             {f.help && (
@@ -99,51 +101,103 @@ export function EntityForm({ action, fields, submitLabel }: { action: Action; fi
           </div>
         );
       })}
-      <button type="submit" disabled={pending}>
-        {pending ? "Saving…" : submitLabel}
-      </button>
+      <div>
+        <button type="submit" className="btn btn-primary" disabled={pending}>
+          {pending ? "Saving…" : submitLabel}
+        </button>
+      </div>
     </form>
   );
 }
 
-export function DeleteButton({ action, label }: { action: (prev: FormState) => Promise<FormState>; label: string }) {
+/** A button that asks for confirmation, then runs a server action (delete, cancel…). */
+export function ConfirmButton({
+  action,
+  label,
+  confirmText,
+  pendingLabel = "Working…",
+  variant = "danger",
+}: {
+  action: (prev: FormState) => Promise<FormState>;
+  label: string;
+  confirmText: string;
+  pendingLabel?: string;
+  variant?: "danger" | "secondary" | "primary";
+}) {
   const [state, formAction, pending] = useActionState(action, {});
   return (
     <form
       action={formAction}
       onSubmit={(e) => {
-        if (!confirm(`Delete ${label}? This cannot be undone.`)) e.preventDefault();
+        if (!confirm(confirmText)) e.preventDefault();
       }}
     >
       {state.error && (
-        <p className="alert error" role="alert">
+        <p role="alert" className="mb-3 rounded-md border border-[#f5c2bd] bg-danger-soft px-4 py-3 text-sm text-danger">
           {state.error}
         </p>
       )}
-      <button type="submit" className="danger" disabled={pending}>
-        {pending ? "Deleting…" : `Delete ${label}`}
+      {state.ok && (
+        <p role="status" className="mb-3 rounded-md border border-brand-300 bg-brand-100 px-4 py-3 text-sm text-brand-900">
+          {state.ok}
+        </p>
+      )}
+      <button type="submit" className={`btn btn-${variant}`} disabled={pending}>
+        {pending ? pendingLabel : label}
       </button>
     </form>
   );
 }
 
-export function PasswordForm({ action }: { action: Action }) {
-  const [state, formAction, pending] = useActionState(action, {});
-  const field = (name: string, label: string, autoComplete: string) => (
-    <div className="field">
+function SimpleField({ name, label, type = "text", autoComplete, state, defaultValue }: {
+  name: string; label: string; type?: string; autoComplete?: string; state: FormState; defaultValue?: string;
+}) {
+  const err = state.fieldErrors?.[name];
+  return (
+    <div className="grid gap-1">
       <label htmlFor={name}>{label}</label>
-      <input id={name} name={name} type="password" required autoComplete={autoComplete} aria-invalid={state.fieldErrors?.[name] ? true : undefined} />
-      {state.fieldErrors?.[name] && <small className="field-error">{state.fieldErrors[name]}</small>}
+      <input
+        id={name} name={name} type={type} required autoComplete={autoComplete} defaultValue={defaultValue}
+        aria-invalid={err ? true : undefined} aria-describedby={err ? `${name}_err` : undefined}
+      />
+      {err && <small id={`${name}_err`} className="field-error">{err}</small>}
     </div>
   );
+}
+
+function FormMessages({ state }: { state: FormState }) {
   return (
-    <form action={formAction} className="form">
-      {state.error && <p className="alert error" role="alert">{state.error}</p>}
-      {state.ok && <p className="alert ok" role="status">{state.ok}</p>}
-      {field("current_password", "Current password", "current-password")}
-      {field("new_password", "New password", "new-password")}
-      {field("confirm_password", "Confirm new password", "new-password")}
-      <button type="submit" disabled={pending}>{pending ? "Saving…" : "Change password"}</button>
+    <>
+      {state.error && <p role="alert" className="rounded-md border border-[#f5c2bd] bg-danger-soft px-4 py-3 text-sm text-danger">{state.error}</p>}
+      {state.ok && <p role="status" className="rounded-md border border-brand-300 bg-brand-100 px-4 py-3 text-sm text-brand-900">{state.ok}</p>}
+    </>
+  );
+}
+
+export function PasswordForm({ action }: { action: Action }) {
+  const [state, formAction, pending] = useActionState(action, {});
+  return (
+    <form action={formAction} className="grid max-w-md gap-4">
+      <FormMessages state={state} />
+      <SimpleField name="current_password" label="Current password" type="password" autoComplete="current-password" state={state} />
+      <SimpleField name="new_password" label="New password" type="password" autoComplete="new-password" state={state} />
+      <SimpleField name="confirm_password" label="Confirm new password" type="password" autoComplete="new-password" state={state} />
+      <div>
+        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? "Saving…" : "Change password"}</button>
+      </div>
+    </form>
+  );
+}
+
+export function NameForm({ action, name }: { action: Action; name: string }) {
+  const [state, formAction, pending] = useActionState(action, {});
+  return (
+    <form action={formAction} className="grid max-w-md gap-4">
+      <FormMessages state={state} />
+      <SimpleField name="name" label="Full name" autoComplete="name" state={state} defaultValue={state.values?.name ?? name} />
+      <div>
+        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? "Saving…" : "Save name"}</button>
+      </div>
     </form>
   );
 }

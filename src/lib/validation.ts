@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AppError } from "./errors";
-import { ENTITIES, type EntityDef, type FieldDef } from "./entities";
+import { ENTITIES, writableFields, type EntityDef, type FieldDef, type Role } from "./entities";
 
 export type FormInput = Record<string, string | undefined>;
 export type Mode = "create" | "update";
@@ -24,11 +24,14 @@ export function isStrongPassword(p: string) {
   );
 }
 
-function isRealDate(s: string) {
+export function isRealDate(s: string) {
+  if (!DATE.test(s)) return false;
   const [y, m, d] = s.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
+
+export const isMoney = (s: string) => MONEY.test(s);
 
 function fieldSchema(f: FieldDef, mode: Mode): z.ZodType<unknown> {
   const s = z.string().trim();
@@ -53,7 +56,7 @@ function fieldSchema(f: FieldDef, mode: Mode): z.ZodType<unknown> {
           else if (f.min !== undefined && Number(v) < f.min) ctx.addIssue({ code: "custom", message: `Must be at least ${f.min}.` });
         } else if (f.type === "money") {
           if (!MONEY.test(v)) ctx.addIssue({ code: "custom", message: "Enter an amount like 1500 or 1500.50 (max 999999.99)." });
-        } else if (!DATE.test(v) || !isRealDate(v)) {
+        } else if (!isRealDate(v)) {
           ctx.addIssue({ code: "custom", message: "Enter a valid date (YYYY-MM-DD)." });
         }
       });
@@ -69,31 +72,22 @@ function fieldSchema(f: FieldDef, mode: Mode): z.ZodType<unknown> {
     }
     case "password":
       return s.refine(isStrongPassword, PASSWORD_RULE);
-    case "bool":
-      return z.any().transform((v) => v === "on" || v === "true" || v === true);
   }
 }
 
-/** Fields a user may submit for this mode (computed / immutable ones are excluded). */
-export function inputFields(e: EntityDef, mode: Mode) {
-  return e.fields.filter(
-    (f) => !f.computed && (mode === "create" ? f.onCreate !== false : f.onUpdate !== false),
-  );
-}
-
 /**
- * Validates raw form strings for an entity. Unknown keys are ignored, so a
- * client can never write a column that isn't explicitly allowed.
+ * Validates raw form strings for an entity. Only fields this role may write
+ * are read, so a client can never set a column that isn't explicitly allowed.
  */
-export function parseInput(e: EntityDef, mode: Mode, input: FormInput): Record<string, unknown> {
+export function parseInput(e: EntityDef, mode: Mode, input: FormInput, role: Role): Record<string, unknown> {
   const values: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
-  for (const f of inputFields(e, mode)) {
+  for (const f of writableFields(e, role, mode)) {
     const raw = input[f.name] ?? (mode === "create" ? f.defaultValue : undefined);
     // On update, a blank password means "keep the current one".
     if (f.type === "password" && mode === "update" && (raw ?? "").trim() === "") continue;
-    if (f.type !== "bool" && (raw === undefined || raw.trim() === "") && !f.required) continue;
-    const r = fieldSchema(f, mode).safeParse(f.type === "bool" ? raw : (raw ?? ""));
+    if ((raw === undefined || raw.trim() === "") && !f.required) continue;
+    const r = fieldSchema(f, mode).safeParse(raw ?? "");
     if (r.success) values[f.name] = r.data;
     else errors[f.name] = r.error.issues[0]?.message ?? "Invalid value.";
   }
