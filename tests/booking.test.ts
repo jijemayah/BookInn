@@ -50,7 +50,7 @@ describe("creating reservations", () => {
     for (const out of ["2027-01-10", "2027-01-09"])
       await expect(
         quoteBooking(db, FRONT_DESK, { cus_id: "1001", discount_type: "NONE", stays: [stay("406", "2027-01-10", out)] }, TODAY),
-      ).rejects.toMatchObject({ code: "validation", fieldErrors: { check_out_date: expect.any(String) } });
+      ).rejects.toMatchObject({ code: "validation", fieldErrors: { out_406: expect.any(String) } });
   });
 
   it("4. rejects a reservation starting in the past, allows check-in today", async () => {
@@ -59,6 +59,27 @@ describe("creating reservations", () => {
     ).rejects.toMatchObject({ code: "validation", message: expect.stringContaining("past") });
     const q = await quoteBooking(db, FRONT_DESK, { cus_id: "1001", discount_type: "NONE", stays: [stay("406", TODAY, "2026-11-02")] }, TODAY);
     expect(q.dueCents).toBe(150_000);
+  });
+
+  it("rooms in one reservation can have different check-in and check-out dates", async () => {
+    // Room 205: Mar 10–12 (2 nights × 1500). Room 108: Mar 11–15 (4 nights × 3000). Total 15,000.
+    const b = await book({
+      cus_id: "1002", discount_type: "NONE",
+      stays: [stay("205", "2028-03-10", "2028-03-12"), stay("108", "2028-03-11", "2028-03-15")],
+    });
+    const rooms = await db.query("SELECT room_no, check_in_date, check_out_date FROM bookinn.reservation_room WHERE res_id = $1 ORDER BY room_no", [b.resId]);
+    expect(rooms.rows).toEqual([
+      { room_no: 108, check_in_date: "2028-03-11", check_out_date: "2028-03-15" },
+      { room_no: 205, check_in_date: "2028-03-10", check_out_date: "2028-03-12" },
+    ]);
+    expect(b.quote.lines.map((l) => [l.room_no, l.nights, l.subtotalCents])).toEqual([[205, 2, 300_000], [108, 4, 1_200_000]]);
+    expect(await getRow(db, FRONT_DESK, "payment", b.payId)).toMatchObject({ pay_amt: "15000.00", pts_earn: 300 });
+
+    // Each room blocks only its own dates, even though the reservation stays Booked until Mar 15:
+    // room 205 is free again from Mar 12, room 108 is busy until Mar 15.
+    const next = await book({ cus_id: "1001", discount_type: "NONE", stays: [stay("205", "2028-03-12", "2028-03-14")] });
+    expect(next.resId).toBeTruthy();
+    await expect(book({ cus_id: "1001", discount_type: "NONE", stays: [stay("108", "2028-03-14", "2028-03-16")] })).rejects.toMatchObject({ code: "conflict" });
   });
 
   it("supports several rooms in one reservation, and rejects the same room twice", async () => {

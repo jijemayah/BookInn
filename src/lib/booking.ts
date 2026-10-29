@@ -68,18 +68,24 @@ const inputSchema = z.object({
     .max(20, "At most 20 rooms per reservation."),
 });
 
-function fieldErrors(err: z.ZodError) {
+function fieldErrors(err: z.ZodError, input: BookingInput) {
   const out: Record<string, string> = {};
   for (const i of err.issues) {
-    const path = i.path[0] === "stays" ? (i.path.length > 2 ? String(i.path[2]) : "stays") : String(i.path[0]);
-    out[path] ??= i.message;
+    let key = String(i.path[0]);
+    if (i.path[0] === "stays") {
+      // Attach the message to the room's own date field, e.g. in_205 / out_205.
+      const room = input.stays?.[Number(i.path[1])]?.room_no;
+      const field = i.path[2];
+      key = i.path.length > 2 && room ? `${field === "check_in_date" ? "in" : field === "check_out_date" ? "out" : "room"}_${room}` : "stays";
+    }
+    out[key] ??= i.message;
   }
   return out;
 }
 
 function parse(input: BookingInput) {
   const r = inputSchema.safeParse(input);
-  if (!r.success) throw new AppError("validation", "Please fix the highlighted fields.", fieldErrors(r.error));
+  if (!r.success) throw new AppError("validation", "Please fix the highlighted fields.", fieldErrors(r.error, input));
   return r.data;
 }
 
@@ -95,9 +101,11 @@ async function price(t: Db, input: ReturnType<typeof parse>, today: string, lock
   const lines: QuoteLine[] = [];
   for (const s of input.stays) {
     if (s.check_out_date <= s.check_in_date)
-      throw new AppError("validation", `Room ${s.room_no}: check-out must be after check-in.`, { check_out_date: "Must be after check-in." });
+      throw new AppError("validation", `Room ${s.room_no}: check-out must be after check-in.`, { [`out_${s.room_no}`]: "Must be after check-in." });
     if (s.check_in_date < today)
-      throw new AppError("validation", `Bookings cannot start in the past (today is ${today}).`, { check_in_date: `On or after ${today}.` });
+      throw new AppError("validation", `Room ${s.room_no}: bookings cannot start in the past (today is ${today}).`, {
+        [`in_${s.room_no}`]: `On or after ${today}.`,
+      });
     const dup = lines.find(
       (l) => String(l.room_no) === s.room_no && l.check_in_date < s.check_out_date && l.check_out_date > s.check_in_date,
     );

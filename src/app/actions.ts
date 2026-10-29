@@ -138,13 +138,16 @@ export type BookingState = FormState & { quote?: Quote; rooms?: string[] };
 function bookingInput(fd: FormData): { input: BookingInput; values: Record<string, string>; rooms: string[] } {
   const values = echo(formToInput(fd));
   const rooms = fd.getAll("room_no").map(String).filter(Boolean);
-  const checkIn = values.check_in_date ?? "";
-  const checkOut = values.check_out_date ?? "";
   return {
     input: {
       cus_id: values.cus_id ?? "",
       discount_type: values.discount_type || "NONE",
-      stays: rooms.map((room_no) => ({ room_no, check_in_date: checkIn, check_out_date: checkOut })),
+      // Each room carries its own check-in and check-out (in_<room> / out_<room>).
+      stays: rooms.map((room_no) => ({
+        room_no,
+        check_in_date: values[`in_${room_no}`] ?? values.check_in_date ?? "",
+        check_out_date: values[`out_${room_no}`] ?? values.check_out_date ?? "",
+      })),
       pay_method: values.pay_method,
       pay_amt: values.pay_amt,
     },
