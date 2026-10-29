@@ -8,7 +8,7 @@ import { isRealDate } from "@/lib/validation";
 import { peso } from "@/lib/money";
 import { runMaintenanceAction } from "@/app/actions";
 import { ConfirmButton } from "@/components/forms";
-import { Alert, EmptyState, PageHeader, Section, Stat, StatusBadge } from "@/components/ui";
+import { EmptyState, PageHeader, Section, Stat, StatusBadge } from "@/components/ui";
 
 export default async function Dashboard({ searchParams }: PageProps<"/">) {
   const staff = await requireStaff();
@@ -28,7 +28,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/">) {
     <>
       <PageHeader
         title="Dashboard"
-        description={`Welcome, ${staff.name}. Figures are live from the database (today is ${today}, Asia/Manila).`}
+        description={`Overview for ${today}.`}
         actions={canBook && <Link href="/book" className="btn btn-primary">New booking</Link>}
       />
 
@@ -59,9 +59,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/">) {
             </div>
             <button type="submit" className="btn btn-secondary">Check</button>
           </form>
-          <p className="mb-3 text-xs text-muted">
-            {from} → {to}. Only Booked reservations block a room; a guest may check in on another guest&apos;s check-out day.
-          </p>
+          <p className="mb-3 text-xs text-muted">{from} → {to}</p>
           <div className="overflow-x-auto rounded-lg border border-line">
             <table>
               <thead>
@@ -112,11 +110,9 @@ export default async function Dashboard({ searchParams }: PageProps<"/">) {
 
       {staff.role === DBA && (
         <Section title="Daily maintenance">
-          <Alert kind="info">
-            Runs automatically every day at 00:05 Manila time on Vercel (Vercel Cron, needs CRON_SECRET). It marks reservations Completed the day after
-            their latest check-out, and permanently deletes reservations with their rooms, payment, receipt and cancellation one year after the latest
-            check-out (SRS §3.3). Guests and loyalty accounts are kept.
-          </Alert>
+          <p className="mb-4 text-sm text-muted">
+            Runs automatically every day. Completes finished stays and removes reservation records one year after check-out.
+          </p>
           <ConfirmButton
             action={runMaintenanceAction}
             label="Run daily maintenance now"

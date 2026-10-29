@@ -29,7 +29,12 @@ export async function buildFormFields(db: Db, actor: Actor, e: EntityDef, mode: 
       required: f.type === "password" && mode === "update" ? false : f.required,
       max: f.max,
       min: f.min,
-      help: f.type === "text" && f.patternHint ? `${f.patternHint}${f.help ? `. ${f.help}` : ""}` : f.help,
+      help:
+        f.type === "password" && mode === "update"
+          ? "Leave blank to keep the current password."
+          : f.type === "text" && f.patternHint
+            ? `${f.patternHint}${f.help ? `. ${f.help}` : ""}`
+            : f.help,
       options,
       readOnly: immutable,
       value: f.type === "password" ? "" : current !== undefined && current !== null ? String(current) : f.defaultValue,

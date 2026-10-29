@@ -21,9 +21,9 @@ export default async function NewPage({ params }: PageProps<"/[entity]/new">) {
   const fields = await buildFormFields(getDb(), actor, e, "create");
   return (
     <>
-      <PageHeader title={`New ${e.label.toLowerCase()}`} description={e.description} back={{ href: `/${e.key}`, label: e.plural }} />
+      <PageHeader title={`New ${e.label.toLowerCase()}`} back={{ href: `/${e.key}`, label: e.plural }} />
       {e.bookingFlow && (
-        <Alert kind="warn">Administrator correction form. Normal bookings, payments and receipts are created on the New booking form.</Alert>
+        <Alert kind="warn">Correction form. Use New booking for regular bookings.</Alert>
       )}
       <div className="card">
         <EntityForm action={createAction.bind(null, e.key)} fields={fields} submitLabel={`Create ${e.label.toLowerCase()}`} />

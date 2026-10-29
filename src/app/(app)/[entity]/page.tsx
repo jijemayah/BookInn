@@ -62,7 +62,7 @@ export default async function ListPage({ params, searchParams }: PageProps<"/[en
 
   return (
     <>
-      <PageHeader title={e.plural} description={e.description} actions={newLink} />
+      <PageHeader title={e.plural} actions={newLink} />
       {saved && <Alert kind="ok">{saved}</Alert>}
 
       <form role="search" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label={`Search ${e.plural}`}>

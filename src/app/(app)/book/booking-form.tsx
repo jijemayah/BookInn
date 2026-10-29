@@ -52,7 +52,7 @@ export function BookingForm({
               <option value="">— Select a guest —</option>
               {customers.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
-            <small className="help">Guest not listed? <Link href="/customer/new">Add the customer first</Link> (name, email and mobile are required).</small>
+            <small className="help">Guest not listed? <Link href="/customer/new">Add a customer</Link>.</small>
             <FieldError state={state} k="cus_id" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -77,7 +77,7 @@ export function BookingForm({
                 </label>
               ))}
             </div>
-            <small className="help">All selected rooms use the dates above. Availability is checked when you review.</small>
+            <small className="help">All selected rooms share these dates.</small>
             <FieldError state={state} k="room_no" />
             <FieldError state={state} k="stays" />
           </fieldset>
@@ -88,7 +88,7 @@ export function BookingForm({
               <option value="12% Discount">12% Discount (100 points)</option>
               <option value="Free Night">Free Night (250 points)</option>
             </select>
-            <small className="help">A payment either earns points (amount ÷ 50) or spends them, never both.</small>
+            <small className="help">Discounts cannot be combined with earning points.</small>
             <FieldError state={state} k="discount_type" />
           </div>
           <div>
@@ -136,19 +136,15 @@ export function BookingForm({
               </table>
             </div>
             <p className="mt-3 text-sm text-muted">
-              {q.pointsEarn > 0 && `The guest will earn ${q.pointsEarn} loyalty points. `}
-              {q.pointsSpend > 0 && `${q.pointsSpend} points will be deducted. `}
-              {!q.loyalty && "No points are earned without a loyalty account. "}
-              Points are final once the payment is logged, even if the reservation is later cancelled.
+              {q.pointsEarn > 0 && `Earns ${q.pointsEarn} points.`}
+              {q.pointsSpend > 0 && `Uses ${q.pointsSpend} points.`}
+              {!q.loyalty && "No loyalty account."}
             </p>
           </section>
 
           <section className="card grid gap-5" aria-labelledby="pay-h">
             <h2 id="pay-h">3. Record the full payment</h2>
-            <p className="text-sm text-muted">
-              Collect the full amount from the guest, then record it here. BookInn keeps the record only; it does not charge cards or move money.
-              After confirming, the room selection and dates can no longer be edited.
-            </p>
+            <p className="text-sm text-muted">Reservations are locked once confirmed.</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1">
                 <label htmlFor="pay_method">Payment method <span aria-hidden="true" className="text-danger">*</span></label>

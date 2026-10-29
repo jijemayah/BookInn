@@ -26,6 +26,6 @@ export const SAVED_MESSAGES: Record<string, string> = {
   created: "Record created.",
   updated: "Changes saved.",
   deleted: "Record deleted.",
-  booked: "Booking confirmed. The payment and receipt were recorded.",
-  cancelled: "Reservation cancelled. Its rooms are free again; the payment and points stay as recorded (no refund).",
+  booked: "Booking confirmed.",
+  cancelled: "Reservation cancelled.",
 };

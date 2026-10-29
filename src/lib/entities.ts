@@ -78,7 +78,6 @@ export interface EntityDef {
   bookingFlow?: boolean;
   /** Edits are administrator corrections of logged records (§1.4). */
   correctionOnly?: boolean;
-  description: string;
 }
 
 export const ENTITY_KEYS = [
@@ -116,11 +115,9 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkGenerated: true,
     labelSql: "t.cus_name || ' <' || t.cus_email || '>'",
     perms: perms([FD, DBA], [FD, DBA], [DBA]),
-    description:
-      "Guest records (FR-07 – FR-09). Guest profiles are kept permanently; only a customer with no reservations or loyalty account can be deleted.",
     fields: [
       { name: "cus_name", label: "Full name", type: "text", required: true, max: 100 },
-      { name: "cus_email", label: "Email", type: "email", required: true, max: 100, help: "Required: receipts are addressed to this email." },
+      { name: "cus_email", label: "Email", type: "email", required: true, max: 100, help: "Used for receipts." },
       {
         name: "cus_mobile",
         label: "Mobile number",
@@ -143,8 +140,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkGenerated: true,
     labelSql: "'#' || t.lyl_id || ' (' || t.total_pts || ' pts)'",
     perms: perms([FD, DBA], [DBA], [DBA]),
-    description:
-      "One loyalty account per guest (FR-10). Points are earned (payment ÷ 50) or spent (100 pts = 12% off, 250 pts = free night) only when a payment is recorded.",
     fields: [
       { name: "cus_id", label: "Customer", type: "ref", ref: "customer", required: true, onUpdate: false },
       {
@@ -153,7 +148,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
         type: "int",
         min: 0,
         writeRoles: [DBA],
-        help: "Maintained automatically from payments. Only the Database Administrator can correct it.",
+        help: "Updated automatically from payments.",
       },
     ],
   },
@@ -168,7 +163,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkGenerated: false,
     labelSql: "t.room_type_id || ' – ' || t.room_type || ', ' || t.room_view || ' (₱' || t.room_price || ')'",
     perms: perms([DBA], [DBA], [DBA]),
-    description: "Room type catalogue: type, view and nightly price. Managed by the Database Administrator.",
     fields: [
       {
         name: "room_type_id",
@@ -197,8 +191,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     labelSql:
       "'Room ' || t.room_no || COALESCE((SELECT ' – ' || d.room_type || ', ' || d.room_view || ' (₱' || d.room_price || '/night)' FROM bookinn.room_details d WHERE d.room_type_id = t.room_type_id), '')",
     perms: perms([DBA], [DBA], [DBA]),
-    description:
-      "Physical rooms (FR-11, FR-12). Availability is worked out from Booked reservations only; use the availability check on the dashboard.",
     fields: [
       { name: "room_no", label: "Room number", type: "int", required: true, min: 1, onUpdate: false },
       { name: "room_type_id", label: "Room type", type: "ref", ref: "room_details", required: true },
@@ -218,8 +210,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     perms: perms([FD, DBA], [DBA], [DBA]),
     bookingFlow: true,
     correctionOnly: true,
-    description:
-      "Bookings (FR-13 – FR-17). A reservation is created together with its rooms and full payment. After that only the status changes: Front Desk cancels, and the system marks it Completed the day after the latest check-out.",
     fields: [
       { name: "cus_id", label: "Customer", type: "ref", ref: "customer", required: true },
       {
@@ -231,7 +221,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
         onCreate: false,
         required: true,
         filter: true,
-        help: "To cancel, use Cancel reservation. To reinstate a cancellation, delete the cancellation record.",
+        help: "Use Cancel reservation to cancel.",
       },
     ],
   },
@@ -248,8 +238,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     perms: perms([DBA], [DBA], [DBA]),
     bookingFlow: true,
     correctionOnly: true,
-    description:
-      "Rooms and stay dates within a reservation. Added by the booking form; afterwards only the Database Administrator can correct them.",
     fields: [
       { name: "res_id", label: "Reservation", type: "ref", ref: "reservation", required: true, onUpdate: false },
       { name: "room_no", label: "Room", type: "ref", ref: "room", required: true },
@@ -270,8 +258,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     perms: perms([DBA], [DBA], [DBA]),
     bookingFlow: true,
     correctionOnly: true,
-    description:
-      "One full payment per reservation (FR-18 – FR-20), recorded by Front Desk with the booking. BookInn keeps payment records; it does not process card, bank or e-wallet transactions.",
     fields: [
       { name: "res_id", label: "Reservation", type: "ref", ref: "reservation", required: true, onUpdate: false },
       { name: "pay_method", label: "Payment method", type: "enum", options: ENUMS.pay_method, required: true, filter: true },
@@ -285,7 +271,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
         required: true,
         defaultValue: "NONE",
         filter: true,
-        help: "12% Discount = 100 pts, Free Night = 250 pts (requires a loyalty account with enough points).",
+        help: "12% Discount: 100 pts. Free Night: 250 pts.",
       },
       { name: "pts_earn", label: "Points earned", type: "int", computed: true },
       { name: "pts_spend", label: "Points spent", type: "int", computed: true },
@@ -303,8 +289,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     labelSql: "'Receipt #' || t.rct_no",
     perms: perms([DBA], [], [DBA]),
     bookingFlow: true,
-    description:
-      "One traceable receipt per payment, generated automatically when the payment is recorded. Emailing receipts is not set up yet (no email service configured).",
     fields: [{ name: "pay_id", label: "Payment", type: "ref", ref: "payment", required: true, onUpdate: false }],
   },
   cancellation: {
@@ -318,8 +302,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkGenerated: true,
     labelSql: "'#' || t.cancel_id || ' (reservation #' || t.res_id || ')'",
     perms: perms([FD, DBA], [DBA], [DBA]),
-    description:
-      "Cancelling sets the reservation to Cancelled and frees its rooms. No fees and no refunds; points already earned or spent stay final.",
     fields: [
       { name: "res_id", label: "Reservation", type: "ref", ref: "reservation", required: true, onUpdate: false },
       { name: "cancel_date", label: "Cancellation date", type: "date", required: true },
@@ -336,8 +318,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkGenerated: true,
     labelSql: "t.name || ' (' || t.u_name || ')'",
     perms: perms([DBA], [DBA], [DBA], [DBA]),
-    description:
-      "Staff logins and roles (FR-01 – FR-06). Deactivate accounts instead of deleting staff who have audit history.",
     fields: [
       {
         name: "u_name",
@@ -356,7 +336,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
         type: "password",
         required: true,
         list: false,
-        help: "Min. 8 chars with upper, lower, digit and special character. Leave blank on edit to keep.",
+        help: "8+ characters with upper and lower case, a number and a symbol.",
       },
       {
         name: "is_active",
@@ -366,7 +346,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
         required: true,
         defaultValue: "Yes",
         filter: true,
-        help: "Deactivated accounts cannot sign in; their history is kept.",
+        help: "Inactive accounts cannot sign in.",
       },
     ],
   },
@@ -381,8 +361,6 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkGenerated: true,
     labelSql: "'#' || t.audit_id",
     perms: perms([], [], [], [DBA]),
-    description:
-      "Written automatically by the database on every insert, update and delete. View-only. Staff = blank means a system action (daily jobs).",
     fields: [
       { name: "staff_id", label: "Staff", type: "ref", ref: "staff" },
       { name: "action", label: "Action", type: "enum", options: ["INSERT", "UPDATE", "DELETE"], filter: true },

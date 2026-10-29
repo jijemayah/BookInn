@@ -25,7 +25,7 @@ export default async function BookPage({ searchParams }: PageProps<"/book">) {
     <>
       <PageHeader
         title="New booking"
-        description="Create the reservation and record its full payment in one step (SRS §3.3: payments are settled immediately when reserving)."
+        description="Reserve rooms and record the payment."
         back={{ href: "/reservation", label: "Reservations" }}
       />
       <BookingForm

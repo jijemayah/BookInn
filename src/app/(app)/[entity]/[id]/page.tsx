@@ -99,7 +99,7 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
             <dt>Amount paid</dt><dd className="font-semibold">₱{String(receipt.p.pay_amt)}</dd>
             <dt>Loyalty points</dt><dd>+{String(receipt.p.pts_earn)} earned / −{String(receipt.p.pts_spend)} spent</dd>
           </dl>
-          <p className="help mt-4">No refunds on cancellation (SRS §3.3). Email delivery of receipts is not configured; print or show this page to the guest.</p>
+          <p className="help mt-4">Non-refundable. Print or present this receipt to the guest.</p>
         </Section>
       ) : (
         <Section title="Details">
@@ -124,18 +124,14 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
             )}
           </dl>
           {e.key === "reservation" && (
-            <p className="help mt-4">
-              Logged reservations cannot be edited (SRS §1.4). Front Desk may cancel a Booked reservation; the system marks it Completed the day after the latest check-out.
-            </p>
+            <p className="help mt-4">Confirmed reservations are locked. Stays complete automatically after check-out.</p>
           )}
         </Section>
       )}
 
       {canCancel && (
         <Section title="Cancel reservation">
-          <p className="mb-4 text-sm text-muted">
-            Cancelling frees the rooms for these dates. There is no cancellation fee and no refund; the payment record and any loyalty points earned or spent stay as they are.
-          </p>
+          <p className="mb-4 text-sm text-muted">Releases the rooms. No fee or refund; the payment and points are kept.</p>
           <ConfirmButton
             action={cancelReservationAction.bind(null, id)}
             label={`Cancel reservation #${id}`}
@@ -179,9 +175,7 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
       {fields.length > 0 && (
         <Section title={e.correctionOnly ? "Correct this record (Database Administrator)" : "Edit"}>
           {e.correctionOnly && (
-            <Alert kind="warn">
-              Use this only to fix an entry error. Business rules still apply (availability, exact amount due, points) and the change is recorded in the audit trail.
-            </Alert>
+            <Alert kind="warn">For correcting entry errors only. All changes are logged.</Alert>
           )}
           <EntityForm action={updateAction.bind(null, e.key, id)} fields={fields} submitLabel="Save changes" />
         </Section>
@@ -190,8 +184,8 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
       {canDelete && (
         <Section title="Delete">
           <p className="mb-4 text-sm text-muted">
-            Deletion is refused while other records depend on this one, so reservation, payment and audit history is not lost.
-            {e.key === "staff" && " Deactivate staff instead of deleting them."}
+            Records linked to other records cannot be deleted.
+            {e.key === "staff" && " Deactivate staff accounts instead."}
           </p>
           <ConfirmButton
             action={deleteAction.bind(null, e.key, id)}

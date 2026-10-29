@@ -8,7 +8,7 @@ export default async function AccountPage() {
   const staff = await requireStaff();
   return (
     <>
-      <PageHeader title="Account settings" description="Manage your own account (FR-03). Only the Database Administrator can change usernames, roles or account status." />
+      <PageHeader title="Account settings" description="Manage your name and password." />
       <Section title="Your account">
         <dl className="details">
           <dt>Username</dt>
