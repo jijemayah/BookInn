@@ -88,15 +88,17 @@ cannot read BookInn data. Do not commit `.env*` files.
 
 ### Mock logins (sample data)
 
-| Username | Role | What to try |
-|---|---|---|
-| `ADMIN` | Database Administrator | Staff, audit trail, rooms, corrections, "Run daily maintenance now" |
-| `KDPALVARADO` | Front Desk | New booking, customers, loyalty accounts, cancelling |
-| `JESMEDEL` | Finance | Read-only view of payments, receipts, reservations and the dashboard |
+| Role | Username | Password | What to try |
+|---|---|---|---|
+| Database Administrator | `ADMIN` | `BkCO6QLnD4XtgaNTnw#7` | Staff, audit trail, rooms, corrections, "Run daily maintenance now" |
+| Front Desk | `KDPALVARADO` | `BkpDsxHaxKfF70WMZR#7` | New booking, customers, loyalty accounts, cancelling |
+| Finance | `JESMEDEL` | `BkRZnH0AxEWDtb9WZl#7` | Read-only view of payments, receipts, reservations and the dashboard |
 
-`npm run db:seed` prints random passwords once (or uses `SEED_ADMIN_PASSWORD`, `SEED_FRONTDESK_PASSWORD`,
-`SEED_FINANCE_PASSWORD`). The database that was seeded on 28 Oct still has the passwords from that run. **Change them before
-real guest data is entered.** In that database `JESMEDEL` is active; the old seed did not deactivate anyone.
+These are mock accounts for trying the system. Usernames are not case-sensitive. **Change the passwords (Account settings)
+before real guest data is entered.**
+
+For a new database, `npm run db:seed` prints random passwords once (or uses `SEED_ADMIN_PASSWORD`, `SEED_FRONTDESK_PASSWORD`,
+`SEED_FINANCE_PASSWORD`).
 
 ### Sample data (SRS §4.2 3NF, corrected)
 
