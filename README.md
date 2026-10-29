@@ -93,6 +93,7 @@ cannot read BookInn data. Do not commit `.env*` files.
 | Database Administrator | `ADMIN` | `BkCO6QLnD4XtgaNTnw#7` | Staff, audit trail, rooms, corrections, "Run daily maintenance now" |
 | Front Desk | `KDPALVARADO` | `BkpDsxHaxKfF70WMZR#7` | New booking, customers, loyalty accounts, cancelling |
 | Finance | `JESMEDEL` | `BkRZnH0AxEWDtb9WZl#7` | Read-only view of payments, receipts, reservations and the dashboard |
+| Finance | `ETEGGERE` | `zjTTbS7teXnxHAM_` | Same as above (second Finance account) |
 
 These are mock accounts for trying the system. Usernames are not case-sensitive. **Change the passwords (Account settings)
 before real guest data is entered.**
