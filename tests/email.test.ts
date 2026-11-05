@@ -26,7 +26,7 @@ import { modifyReservation } from "@/lib/modify";
 import { checkInRoom, checkOutRoom, extendStay, settleCheckout } from "@/lib/stay";
 import { runMaintenance } from "@/lib/maintenance";
 import { listOverdue } from "@/lib/overdue";
-import { sendReceipt } from "@/lib/email";
+import { buildNoShowNotice, buildReceipt, buildRefundConfirmation, sendReceipt } from "@/lib/email";
 import { atHotelTime } from "@/lib/dates";
 import { GET as cronGET } from "@/app/api/cron/maintenance/route";
 import { ADMIN, FINANCE, FRONT_DESK, TODAY, count, freshDb } from "./helpers";
@@ -234,5 +234,78 @@ describe("daily job endpoint", () => {
     const { readFile } = await import("node:fs/promises");
     const cfg = JSON.parse(await readFile("vercel.json", "utf8"));
     expect(cfg.crons).toEqual([{ path: "/api/cron/maintenance", schedule: "5 16 * * *" }]);
+  });
+});
+
+// Last on purpose: the No-Show test runs the daily job on a future date.
+describe("email design: designed HTML plus a plain-text version", () => {
+  const SELF_CONTAINED = /<script|<img|<link|<iframe|https?:\/\//i; // no images, scripts or external files
+
+  it("receipt: brand header, details card, rooms, a highlighted total and the points note", async () => {
+    const b = await book({ cus_id: "1002", discount_type: "NONE", stays: [stay("108", "2028-05-01", "2028-05-03")] }, "2028-04-01");
+    const m = (await buildReceipt(db, b.payId))!;
+    expect(m.html).toMatch(/^<!doctype html>/i);
+    for (const part of ["BookInn", "Hotel reservations", "Paid", `Receipt #${b.rctNo}`, "Receipt number", "Room 108 · Deluxe, Pool View", "2 nights at ₱3,000.00 per night", "Amount paid", "₱6,000.00", "You will earn 60 loyalty points"])
+      expect(m.html).toContain(part);
+    expect(m.html).not.toMatch(SELF_CONTAINED);
+    expect(m.html).toContain("display:none"); // preview line shown in inbox lists
+    // The plain-text version carries the same facts.
+    expect(m.text).toContain("Amount paid: ₱6,000.00");
+    expect(m.text).toContain("Room 108 (Deluxe), 2028-05-01 to 2028-05-03");
+    expect(m.text).not.toMatch(/<[a-z]/i);
+  });
+
+  it("receipt with a discount shows what was used; a Checkout receipt lists the charges with amounts", async () => {
+    const d = await book({ cus_id: "1001", discount_type: "12% Discount", stays: [stay("205", "2028-05-10", "2028-05-12")] }, "2028-04-01");
+    const dm = (await buildReceipt(db, d.payId))!;
+    expect(dm.html).toContain("12% Discount applied: 100 loyalty points used.");
+    expect(dm.html).not.toContain("You will earn"); // a discounted payment earns nothing
+
+    const r = (await roomRow(d.resId)) ;
+    await checkInRoom(db, FRONT_DESK, r, at("2028-05-10 14:00:00"));
+    await extendStay(db, FRONT_DESK, r, "2028-05-13", {}, at("2028-05-11 10:00:00"));
+    await checkOutRoom(db, FRONT_DESK, r, at("2028-05-13 11:00:00"));
+    const s = await settleCheckout(db, FRONT_DESK, d.resId, { pay_method: "Cash", pay_amt: "1500" }, at("2028-05-13 11:05:00"));
+    const cm = (await buildReceipt(db, s.payId!))!;
+    expect(cm.html).toContain("Charges settled");
+    expect(cm.html).toMatch(/Extension charge #\d+/);
+    expect(cm.html).toContain("2028-05-12 to 2028-05-13");
+    expect(cm.html).toContain("₱1,500.00");
+    expect(cm.html).not.toContain(">Rooms<"); // rooms are listed on the booking receipt only
+  });
+
+  it("escapes guest-supplied text so it cannot inject HTML", async () => {
+    const c = await createRow(db, FRONT_DESK, "customer", { cus_name: "Eve <script>alert(1)</script> & Co", cus_email: "eve.design@example.com", cus_mobile: "09170000009" });
+    const b = await book({ cus_id: String(c.cus_id), discount_type: "NONE", stays: [stay("205", "2028-06-01", "2028-06-02")] }, "2028-04-01");
+    const m = (await buildReceipt(db, b.payId))!;
+    expect(m.html).not.toContain("<script");
+    expect(m.html).toContain("Eve &lt;script&gt;alert(1)&lt;/script&gt; &amp; Co");
+  });
+
+  it("refund: a highlighted refunded amount, the returned points and the hand-over note", async () => {
+    const b = await book({ cus_id: "1002", discount_type: "12% Discount", stays: [stay("206", "2028-06-10", "2028-06-11")] }, "2028-04-01");
+    const c = await cancelReservation(db, FRONT_DESK, b.resId, at("2028-04-02 09:00:00"));
+    const m = (await buildRefundConfirmation(db, c.refundId!))!;
+    expect(m.html).toMatch(/^<!doctype html>/i);
+    for (const part of ["Refund", "Refund confirmation", "Amount refunded", "₱1,320.00", "100 loyalty points you spent on this reservation have been returned", "The front desk hands over the refund."])
+      expect(m.html).toContain(part);
+    expect(m.html).not.toMatch(SELF_CONTAINED);
+    expect(m.text).toContain("Amount refunded: ₱1,320.00");
+  });
+
+  it("No-Show: amber badge and a clear list of what it means", async () => {
+    const b = await book({ cus_id: "1002", discount_type: "NONE", stays: [stay("406", "2028-07-01", "2028-07-02")] }, "2028-04-01");
+    await runMaintenance(db, { today: "2028-07-03" });
+    const m = (await buildNoShowNotice(db, b.resId))!;
+    for (const part of ["No-Show", "Reservation marked No-Show", "What this means", "No refund is given.", "No loyalty points were spent on this reservation.", "No loyalty points are earned.", "Room 406 · Standard, Ocean View", "#8a5a00"])
+      expect(m.html).toContain(part);
+    expect(m.html).not.toMatch(SELF_CONTAINED);
+    expect(m.text).toContain("No refund is given");
+  });
+
+  it("returns nothing for a missing record or a reservation that is not a No-Show", async () => {
+    expect(await buildReceipt(db, 999_999)).toBeNull();
+    expect(await buildRefundConfirmation(db, 999_999)).toBeNull();
+    expect(await buildNoShowNotice(db, 1004)).toBeNull(); // 1004 is not a No-Show
   });
 });
