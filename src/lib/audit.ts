@@ -13,3 +13,12 @@ export type Actor = { staffId: number; role: Role };
 export async function setActor(t: Db, actor: { staffId: number | null }) {
   await t.query("SELECT set_config('bookinn.staff_id', $1, true)", [actor.staffId === null ? "" : String(actor.staffId)]);
 }
+
+/**
+ * Tells the database which hotel day this transaction acts on, so the
+ * status and availability triggers (migration 0005, bookinn.hotel_today())
+ * judge "today" exactly like the application does. Transaction-local.
+ */
+export async function setHotelDay(t: Db, today: string) {
+  await t.query("SELECT set_config('bookinn.today', $1, true)", [today]);
+}

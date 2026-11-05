@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { getDb } from "@/lib/db/pg";
 import { pageRows } from "@/lib/crud";
-import { ENTITIES, can } from "@/lib/entities";
+import { DBA, ENTITIES, can } from "@/lib/entities";
+import { enumValues } from "@/lib/room-options";
+import { addRoomOptionAction } from "@/app/actions";
+import { ActionForm } from "@/components/forms";
 import { Alert, EmptyState, PageHeader } from "@/components/ui";
 import { SAVED_MESSAGES, cell, loadEntityPage } from "./shared";
 
@@ -21,14 +24,19 @@ export default async function ListPage({ params, searchParams }: PageProps<"/[en
 
   const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "");
   const q = str("q").slice(0, 100);
-  const filterFields = e.fields.filter((f) => f.filter && f.options);
+  const db = getDb();
+  const filterFields = await Promise.all(
+    e.fields
+      .filter((f) => f.filter && f.options)
+      .map(async (f) => ({ ...f, options: f.dbEnum ? await enumValues(db, f.dbEnum) : f.options! })),
+  );
   const filters = Object.fromEntries(
-    filterFields.map((f) => [f.name, str(f.name)]).filter(([name, v]) => v && filterFields.find((f) => f.name === name)!.options!.includes(v)),
+    filterFields.map((f) => [f.name, str(f.name)]).filter(([name, v]) => v && filterFields.find((f) => f.name === name)!.options.includes(v)),
   );
   const page = Math.max(1, Number.parseInt(str("page"), 10) || 1);
   const sort = str("sort") || undefined;
   const dir = str("dir") === "desc" ? "desc" : str("dir") === "asc" ? "asc" : undefined;
-  const res = await pageRows(getDb(), actor, e.key, { q, filters, page, limit: PAGE_SIZE, sort, dir });
+  const res = await pageRows(db, actor, e.key, { q, filters, page, limit: PAGE_SIZE, sort, dir });
   const cols = e.fields.filter((f) => f.list !== false && f.name !== e.pk);
   const saved = SAVED_MESSAGES[str("saved")];
   const pages = Math.max(1, Math.ceil(res.total / res.limit));
@@ -75,7 +83,7 @@ export default async function ListPage({ params, searchParams }: PageProps<"/[en
             <label htmlFor={`flt_${f.name}`}>{f.label}</label>
             <select id={`flt_${f.name}`} name={f.name} defaultValue={filters[f.name] ?? ""} className="w-auto">
               <option value="">All</option>
-              {f.options!.map((o) => <option key={o}>{o}</option>)}
+              {f.options.map((o) => <option key={o}>{o}</option>)}
             </select>
           </div>
         ))}
@@ -128,7 +136,39 @@ export default async function ListPage({ params, searchParams }: PageProps<"/[en
       )}
       {e.key === "room" && <p className="mt-4 text-sm text-muted">Check availability for specific dates on the <Link href="/">dashboard</Link>.</p>}
       {e.key === "payment" && (
-        <p className="mt-4 text-sm text-muted">Payments are recorded with each booking on the <Link href={can(actor.role, ENTITIES.reservation, "create") ? "/book" : "/reservation"}>booking form</Link>.</p>
+        <p className="mt-4 text-sm text-muted">
+          Initial payments are recorded on the <Link href={can(actor.role, ENTITIES.reservation, "create") ? "/book" : "/reservation"}>booking form</Link>;
+          Checkout payments when the bill is settled on the reservation page.
+        </p>
+      )}
+      {(e.key === "adjustment_charge" || e.key === "refund") && (
+        <p className="mt-4 text-sm text-muted">
+          {e.key === "adjustment_charge"
+            ? "Charges are posted by reservation edits (Modification) and stay extensions (Extension), and settled or voided at check-out and cancellation."
+            : "Refunds are recorded by cancellations (at least 48 hours before check-in) and by Checkout Credits at check-out."}{" "}
+          Front Desk works on them from the reservation page.
+        </p>
+      )}
+      {e.key === "room_details" && actor.role === DBA && (
+        <section className="card mt-6" aria-labelledby="s-room-options">
+          <h2 id="s-room-options" className="mb-2">Add a room type name or room view</h2>
+          <p className="mb-3 text-sm text-muted">
+            New names can then be chosen when creating a room type. Prices are never edited: for a new rate, create a new room type.
+          </p>
+          <ActionForm action={addRoomOptionAction} submitLabel="Add" pendingLabel="Adding…" variant="secondary">
+            <div className="grid gap-1">
+              <label htmlFor="opt_kind">Kind</label>
+              <select id="opt_kind" name="kind" className="w-auto" defaultValue="room_type">
+                <option value="room_type">Room type</option>
+                <option value="room_view">Room view</option>
+              </select>
+            </div>
+            <div className="grid gap-1">
+              <label htmlFor="opt_value">Name</label>
+              <input id="opt_value" name="value" maxLength={30} placeholder="e.g. Suite or Mountain View" required />
+            </div>
+          </ActionForm>
+        </section>
       )}
     </>
   );

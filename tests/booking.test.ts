@@ -7,11 +7,15 @@ import type { Db } from "@/lib/db/types";
 import { cancelReservation, createBooking, quoteBooking, type BookingInput } from "@/lib/booking";
 import { createRow, getRow, updateRow } from "@/lib/crud";
 import { amountDue, pointsEarned, pointsFor, toCents } from "@/lib/money";
-import { ADMIN, FRONT_DESK, TODAY, auditFor, count, freshDb, points } from "./helpers";
+import { ADMIN, FRONT_DESK, NOW, TODAY, auditFor, count, freshDb, points } from "./helpers";
 
 let db: Db;
 let close: () => Promise<void>;
-beforeAll(async () => ({ db, close } = await freshDb()));
+beforeAll(async () => {
+  ({ db, close } = await freshDb());
+  // Fixture: the SRS sample gives guest 1001 only 75 points; these tests redeem several discounts.
+  await db.query("UPDATE bookinn.loyalty_acc SET total_pts = 1000 WHERE lyl_id = 5001");
+});
 afterAll(() => close());
 
 const stay = (room_no: string, check_in_date: string, check_out_date: string) => ({ room_no, check_in_date, check_out_date });
@@ -30,10 +34,10 @@ describe("creating reservations", () => {
     expect(await getRow(db, FRONT_DESK, "reservation", b.resId)).toMatchObject({ booking_status: "Booked", cus_id: 1002 });
     expect(await count(db, "reservation_room", "res_id = $1", [b.resId])).toBe(1);
     expect(await getRow(db, FRONT_DESK, "payment", b.payId)).toMatchObject({
-      res_id: b.resId, pay_amt: "3000.00", pay_date: TODAY, pts_earn: 60, pts_spend: 0, discount_type: "NONE",
+      res_id: b.resId, pay_amt: "3000.00", pay_date: TODAY, pts_earn: 30, pts_spend: 0, discount_type: "NONE",
     });
     expect(await getRow(db, FRONT_DESK, "receipt", b.rctNo)).toMatchObject({ pay_id: b.payId });
-    expect(await points(db, 5002)).toBe(before + 60);
+    expect(await points(db, 5002)).toBe(before); // PTS_EARN 30 is credited only when the stay is Completed
   });
 
   it("2. rejects a reservation without an existing customer", async () => {
@@ -73,7 +77,7 @@ describe("creating reservations", () => {
       { room_no: 205, check_in_date: "2028-03-10", check_out_date: "2028-03-12" },
     ]);
     expect(b.quote.lines.map((l) => [l.room_no, l.nights, l.subtotalCents])).toEqual([[205, 2, 300_000], [108, 4, 1_200_000]]);
-    expect(await getRow(db, FRONT_DESK, "payment", b.payId)).toMatchObject({ pay_amt: "15000.00", pts_earn: 300 });
+    expect(await getRow(db, FRONT_DESK, "payment", b.payId)).toMatchObject({ pay_amt: "15000.00", pts_earn: 150 });
 
     // Each room blocks only its own dates, even though the reservation stays Booked until Mar 15:
     // room 205 is free again from Mar 12, room 108 is busy until Mar 15.
@@ -129,7 +133,7 @@ describe("room availability and double booking", () => {
     await expect(book({ cus_id: "1002", discount_type: "NONE", stays: [stay("108", "2027-04-02", "2027-04-03")] })).rejects.toMatchObject({
       code: "conflict",
     });
-    await cancelReservation(db, FRONT_DESK, b.resId, TODAY);
+    await cancelReservation(db, FRONT_DESK, b.resId, NOW);
     expect((await getRow(db, FRONT_DESK, "reservation", b.resId)).booking_status).toBe("Cancelled");
     const again = await book({ cus_id: "1002", discount_type: "NONE", stays: [stay("108", "2027-04-02", "2027-04-03")] });
     expect(again.resId).toBeTruthy();
@@ -137,6 +141,10 @@ describe("room availability and double booking", () => {
 
   it("8. a Completed reservation does not block availability", async () => {
     const b = await book({ cus_id: "1001", discount_type: "NONE", stays: [stay("206", "2027-05-01", "2027-05-02")] });
+    // Completed needs the stay to be checked in and out first (SRS v2 Table 3).
+    await db.query("UPDATE bookinn.reservation_room SET actual_check_in = '2027-05-01 14:00' WHERE res_id = $1", [b.resId]);
+    await db.query("UPDATE bookinn.reservation SET booking_status = 'Checked-In' WHERE res_id = $1", [b.resId]);
+    await db.query("UPDATE bookinn.reservation_room SET actual_check_out = '2027-05-02 11:00' WHERE res_id = $1", [b.resId]);
     await updateRow(db, ADMIN, "reservation", b.resId, { cus_id: "1001", booking_status: "Completed" });
     const other = await book({ cus_id: "1002", discount_type: "NONE", stays: [stay("206", "2027-05-01", "2027-05-02")] });
     expect(other.resId).toBeTruthy();
@@ -174,14 +182,14 @@ describe("payments and receipts", () => {
 });
 
 describe("loyalty points and discounts", () => {
-  it("12. points earned = payment ÷ 50, decimals discarded", async () => {
-    expect(pointsEarned(toCents("3000"))).toBe(60);
-    expect(pointsEarned(toCents("149.99"))).toBe(2);
-    expect(pointsEarned(toCents("49.99"))).toBe(0);
+  it("12. points earned = payment ÷ 100, decimals discarded", async () => {
+    expect(pointsEarned(toCents("3000"))).toBe(30);
+    expect(pointsEarned(toCents("199.99"))).toBe(1);
+    expect(pointsEarned(toCents("99.99"))).toBe(0);
     const before = await points(db, 5001);
     const b = await book({ cus_id: "1001", discount_type: "NONE", stays: [stay("406", "2027-07-01", "2027-07-04")] }); // 4500
-    expect((await getRow(db, FRONT_DESK, "payment", b.payId)).pts_earn).toBe(90);
-    expect(await points(db, 5001)).toBe(before + 90);
+    expect((await getRow(db, FRONT_DESK, "payment", b.payId)).pts_earn).toBe(45);
+    expect(await points(db, 5001)).toBe(before); // credited only when Completed
   });
 
   it("guests without a loyalty account earn nothing", async () => {
@@ -230,14 +238,16 @@ describe("loyalty points and discounts", () => {
     expect(await points(db, 5001)).toBe(before - 250);
   });
 
-  it("17. cancelling keeps the payment and the points already earned or spent (no refund)", async () => {
+  it("17. cancelling early refunds the payment in full, returns spent points and never credits earned points", async () => {
     const b = await book({ cus_id: "1002", discount_type: "NONE", stays: [stay("205", "2027-12-01", "2027-12-02")] });
     const pts = await points(db, 5002);
-    await cancelReservation(db, FRONT_DESK, b.resId, TODAY);
-    expect(await getRow(db, FRONT_DESK, "payment", b.payId)).toMatchObject({ pay_amt: "1500.00", pts_earn: 30 });
+    const c = await cancelReservation(db, FRONT_DESK, b.resId, NOW);
+    expect(c).toMatchObject({ onTime: true, refundCents: 150_000, pointsReturned: 0 });
+    expect(await getRow(db, FRONT_DESK, "payment", b.payId)).toMatchObject({ pay_amt: "1500.00", pts_earn: 15 });
+    expect(await getRow(db, FRONT_DESK, "refund", c.refundId!)).toMatchObject({ refund_type: "Cancellation", refund_amt: "1500.00", refund_date: TODAY });
     expect(await points(db, 5002)).toBe(pts);
     expect(await count(db, "cancellation", "res_id = $1", [b.resId])).toBe(1);
-    await expect(cancelReservation(db, FRONT_DESK, b.resId, TODAY)).rejects.toMatchObject({ code: "conflict" });
+    await expect(cancelReservation(db, FRONT_DESK, b.resId, NOW)).rejects.toMatchObject({ code: "conflict" });
   });
 });
 
@@ -245,20 +255,22 @@ describe("logged reservations are locked", () => {
   it("21. ordinary users cannot edit a confirmed reservation; administrator corrections are audited", async () => {
     await expect(updateRow(db, FRONT_DESK, "reservation_room", 10005, { room_no: "205", check_in_date: "2026-12-20", check_out_date: "2026-12-23" }))
       .rejects.toMatchObject({ code: "forbidden" });
-    await expect(updateRow(db, FRONT_DESK, "payment", 1004, { pay_method: "Card", pay_date: "2026-10-20", pay_amt: "3000", discount_type: "NONE" }))
+    await expect(updateRow(db, FRONT_DESK, "payment", 1005, { pay_method: "Card", pay_date: "2026-10-20", pay_amt: "3000", discount_type: "NONE" }))
       .rejects.toMatchObject({ code: "forbidden" });
     await expect(updateRow(db, FRONT_DESK, "reservation", 1004, { cus_id: "1002", booking_status: "Booked" }))
       .rejects.toMatchObject({ code: "forbidden" });
 
-    await updateRow(db, ADMIN, "payment", 1004, { pay_method: "Card", pay_date: "2026-10-20", pay_amt: "3000", discount_type: "NONE" });
-    const audit = await auditFor(db, "PAYMENT", 1004);
+    // Payment 1005 is the Initial payment of demo reservation 1004.
+    await updateRow(db, ADMIN, "payment", 1005, { pay_method: "Card", pay_date: "2026-10-20", pay_amt: "3000", discount_type: "NONE" });
+    const audit = await auditFor(db, "PAYMENT", 1005);
     expect(audit.at(-1)).toMatchObject({ action: "UPDATE", staff_id: 1003, old_data: "PAY_METHOD=Cash", new_data: "PAY_METHOD=Card" });
   });
 
   it("an administrator correction that changes the discount adjusts the points once", async () => {
     const before = await points(db, 5001);
-    await updateRow(db, ADMIN, "payment", 1004, { pay_method: "Card", pay_date: "2026-10-20", pay_amt: "2640", discount_type: "12% Discount" });
-    expect(await getRow(db, ADMIN, "payment", 1004)).toMatchObject({ pts_earn: 0, pts_spend: 100 });
-    expect(await points(db, 5001)).toBe(before - 60 - 100);
+    await updateRow(db, ADMIN, "payment", 1005, { pay_method: "Card", pay_date: "2026-10-20", pay_amt: "2640", discount_type: "12% Discount" });
+    expect(await getRow(db, ADMIN, "payment", 1005)).toMatchObject({ pts_earn: 0, pts_spend: 100 });
+    // 1004 is not Completed, so its 30 earned points were never credited: only the 100 spent points change the balance.
+    expect(await points(db, 5001)).toBe(before - 100);
   });
 });

@@ -6,18 +6,20 @@ import { ENTITIES, can, canRead } from "@/lib/entities";
 import { isAppError } from "@/lib/errors";
 import { buildFormFields } from "@/lib/form-fields";
 import { reservationCost } from "@/lib/rules";
+import { reservationView, roomChoices } from "@/lib/reservation-view";
 import { peso } from "@/lib/money";
 import type { Db, Row } from "@/lib/db/types";
-import { cancelReservationAction, deleteAction, updateAction } from "@/app/actions";
+import { deleteAction, updateAction } from "@/app/actions";
 import { ConfirmButton, EntityForm } from "@/components/forms";
 import { PrintButton } from "@/components/print-button";
 import { Alert, PageHeader, Section, StatusBadge } from "@/components/ui";
-import { SAVED_MESSAGES, cell, loadEntityPage } from "../shared";
+import { EMAIL_MESSAGES, SAVED_MESSAGES, cell, loadEntityPage } from "../shared";
+import { ReservationPanel } from "./reservation-panel";
 
 /** Receipt view: payment, reservation and guest details on one printable card. */
 async function receiptDetails(db: Db, row: Row) {
   const r = await db.query(
-    `SELECT p.pay_id, p.pay_method::text, p.pay_date, p.pay_amt::text, p.pts_earn, p.pts_spend, p.discount_type::text,
+    `SELECT p.pay_id, p.pay_type::text, p.pay_method::text, p.pay_date, p.pay_amt::text, p.pts_earn, p.pts_spend, p.discount_type::text,
             res.res_id, res.booking_status::text, c.cus_name, c.cus_email, c.cus_mobile
        FROM bookinn.payment p
        JOIN bookinn.reservation res ON res.res_id = p.res_id
@@ -66,10 +68,12 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
       .map(async (d) => ({ ...d, rows: await listRows(db, actor, d.entity.key, { filter: { field: d.field, value: id }, limit: 50 }) })),
   );
   const cost = e.key === "reservation" ? await reservationCost(db, id) : null;
+  const stay = e.key === "reservation" ? await reservationView(db, actor, id) : null;
+  const roomList = stay?.canAct ? await roomChoices(db) : [];
   const receipt = e.key === "receipt" ? await receiptDetails(db, row) : null;
   const saved = typeof sp.saved === "string" ? SAVED_MESSAGES[sp.saved] : undefined;
+  const email = typeof sp.email === "string" ? EMAIL_MESSAGES[sp.email] : undefined;
   const title = `${e.label} ${e.pkType === "int" ? "#" : ""}${id}`;
-  const canCancel = e.key === "reservation" && row.booking_status === "Booked" && can(actor.role, ENTITIES.cancellation, "create");
 
   return (
     <>
@@ -86,6 +90,7 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
         }
       />
       {saved && <Alert kind="ok">{saved}</Alert>}
+      {email && <Alert kind={email.kind}>{email.text}</Alert>}
 
       {receipt?.p ? (
         <Section title={`Official record – Receipt #${id}`}>
@@ -94,12 +99,12 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
             <dt>Reservation</dt><dd><Link href={`/reservation/${receipt.p.res_id}`}>#{String(receipt.p.res_id)}</Link> <StatusBadge value={String(receipt.p.booking_status)} /></dd>
             <dt>Rooms</dt>
             <dd>{receipt.rooms.map((r) => `Room ${r.room_no} (${r.room_type}, ${r.room_view}) ${r.check_in_date} → ${r.check_out_date}`).join("; ")}</dd>
-            <dt>Payment</dt><dd><Link href={`/payment/${receipt.p.pay_id}`}>#{String(receipt.p.pay_id)}</Link> · {String(receipt.p.pay_method)} · {String(receipt.p.pay_date)}</dd>
+            <dt>Payment</dt><dd><Link href={`/payment/${receipt.p.pay_id}`}>#{String(receipt.p.pay_id)}</Link> · {String(receipt.p.pay_type)} · {String(receipt.p.pay_method)} · {String(receipt.p.pay_date)}</dd>
             <dt>Discount</dt><dd>{String(receipt.p.discount_type)}</dd>
             <dt>Amount paid</dt><dd className="font-semibold">₱{String(receipt.p.pay_amt)}</dd>
-            <dt>Loyalty points</dt><dd>+{String(receipt.p.pts_earn)} earned / −{String(receipt.p.pts_spend)} spent</dd>
+            <dt>Loyalty points</dt><dd>+{String(receipt.p.pts_earn)} earned (credited when the stay is Completed) / −{String(receipt.p.pts_spend)} spent</dd>
           </dl>
-          <p className="help mt-4">Non-refundable. Print or present this receipt to the guest.</p>
+          <p className="help mt-4">This receipt was emailed to the guest when the payment was recorded. Print it if the guest asks for a paper copy.</p>
         </Section>
       ) : (
         <Section title="Details">
@@ -118,28 +123,15 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
               <>
                 <dt>Rooms booked</dt>
                 <dd>{cost.rooms}</dd>
-                <dt>Base cost (before discount)</dt>
-                <dd>{peso(cost.totalCents)} <span className="help">at current room prices</span></dd>
+                <dt>Room nights at room rates</dt>
+                <dd>{peso(cost.totalCents)} <span className="help">(room prices are fixed per room type)</span></dd>
               </>
             )}
           </dl>
-          {e.key === "reservation" && (
-            <p className="help mt-4">Confirmed reservations are locked. Stays complete automatically after check-out.</p>
-          )}
         </Section>
       )}
 
-      {canCancel && (
-        <Section title="Cancel reservation">
-          <p className="mb-4 text-sm text-muted">Releases the rooms. No fee or refund; the payment and points are kept.</p>
-          <ConfirmButton
-            action={cancelReservationAction.bind(null, id)}
-            label={`Cancel reservation #${id}`}
-            pendingLabel="Cancelling…"
-            confirmText={`Cancel reservation #${id}? This cannot be undone by Front Desk and no refund is issued.`}
-          />
-        </Section>
-      )}
+      {stay && <ReservationPanel v={stay} rooms={roomList} />}
 
       {related.map((d) => (
         <Section key={`${d.entity.key}.${d.field}`} title={d.entity.plural}>
@@ -156,8 +148,8 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
                     </Link>{" "}
                     <span className="text-muted">
                       {d.entity.fields
-                        .filter((f) => f.name !== d.field && f.type !== "password" && f.list !== false)
-                        .slice(0, 5)
+                        .filter((f) => f.name !== d.field && f.type !== "password" && f.list !== false && r[f.name] !== null && r[f.name] !== undefined)
+                        .slice(0, 7)
                         .map((f) => {
                           const c = cell(f, r);
                           return typeof c === "string" ? c : String(r[f.name]);

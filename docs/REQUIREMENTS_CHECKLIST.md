@@ -1,101 +1,92 @@
-# BookInn — requirements checklist
+# BookInn — requirements checklist (SRS v2)
 
-Maps every SRS functional requirement and business rule to where it is implemented and how it is tested.
-Test files are in `tests/`; the numbers (#1–#25) are the acceptance cases from the implementation brief.
-"Smoke" = the HTTP + browser check of the production build described in the README.
+Maps every SRS v2 functional requirement and business rule ([`docs/SRS_v2.md`](SRS_v2.md)) to where it is implemented and
+how it is tested. Test files are in `tests/`. Decisions where the SRS is silent are numbered B1–B21 in
+[`docs/SRS_AUDIT.md`](SRS_AUDIT.md).
 
 ## Functional requirements
 
 | ID | Requirement | Implementation | Verified by |
 |---|---|---|---|
-| FR-01 | Staff log in and out | `lib/staff-auth.ts` (bcrypt), `lib/session.ts` (signed HttpOnly cookie), `app/login` | `rbac.test.ts` #18; smoke (wrong password, sign-in) |
-| FR-02 | Create, update, deactivate accounts | Staff screens (administrator only), `STAFF.IS_ACTIVE` Yes/No | `crud.test.ts` STAFF; `rbac.test.ts` #18 |
-| FR-03 | Users manage their own account | Account settings: own name and password | `rbac.test.ts` "lets staff manage their own account" |
-| FR-04 | Administrators assign roles | Staff form `ROLE`; lock-out guard | `rbac.test.ts` "prevents an administrator from locking everyone out" |
-| FR-05 | Enforce the permissions defined for each role | `ENTITIES[*].perms` (SRS permission table), `assertCan` on every operation | `rbac.test.ts` #19 |
-| FR-06 | Restrict features and data by role | Server checks in `crud.ts`/`booking.ts`; role-aware navigation | `rbac.test.ts` #19, #20; smoke (Finance refused on /book, /staff) |
+| FR-01 | Staff log in and out | `lib/staff-auth.ts` (bcrypt), `lib/session.ts` (signed HttpOnly cookie), `app/login` | `rbac.test.ts` |
+| FR-02 | Create, update, deactivate accounts | Staff screens (administrator only), `STAFF.IS_ACTIVE` Yes/No | `crud.test.ts` STAFF; `rbac.test.ts` |
+| FR-03 | Users manage their own account | Account settings: own name and password | `rbac.test.ts` "manage their own account" |
+| FR-04 | Administrators assign roles | Staff form `ROLE`; lock-out guard | `rbac.test.ts` "locking everyone out" |
+| FR-05 | Enforce role permissions | `ENTITIES[*].perms`, `assertCan`, `assertFrontDesk`, `canViewOverdue` | `rbac.test.ts`, `stay.test.ts` permissions, `screens.test.ts` |
+| FR-06 | Restrict features and data by role | Server checks in every library function; role-aware navigation and reservation page | `rbac.test.ts`, `screens.test.ts` |
 | FR-07 | Add and update guest information | Customers (Front Desk, administrator) | `crud.test.ts` CUSTOMER |
-| FR-08 | Search and view guest records | List search, filters, sort, pagination; customer detail | `crud.test.ts` "list pages"; smoke |
-| FR-09 | Guest linked to reservations | `RESERVATION.CUS_ID` FK; customer page lists reservations and loyalty account | smoke `/customer/1001` |
-| FR-10 | Open a loyalty account; points accumulate/spend with payments | Loyalty accounts (start at 0); `booking.ts` updates `TOTAL_PTS` in the payment transaction | `booking.test.ts` #12–#17 |
-| FR-11 | Add and update rooms | Rooms and room types (administrator, per the permission table) | `crud.test.ts` ROOM_DETAILS and ROOM |
-| FR-12 | Display room availability | Dashboard availability check, `lib/dashboard.ts` | `jobs.test.ts` #25 |
-| FR-13 | Create reservations | New booking form (`/book`), `createBooking` | `booking.test.ts` #1 |
-| FR-14 | View and cancel reservations | Reservation detail; Cancel button (Front Desk); no edits after logging | `booking.test.ts` #7, #17, #21; smoke (cancel in browser) |
-| FR-15 | Check availability while booking | Review step prices and checks every room | `booking.test.ts` #5 |
-| FR-16 | Prevent duplicate bookings | Server check + DB trigger with room row lock | `booking.test.ts` #5, #6, #6b |
-| FR-17 | Accurate reservation records | Constraints, single-transaction booking, audit trail | `schema.test.ts`, `booking.test.ts` #9 |
-| FR-18 | Record payment information | Payment written with the booking; receipt generated | `booking.test.ts` #1, #11 |
-| FR-19 | View and log payment records | Front Desk logs (booking form), Finance views, administrator corrects | `rbac.test.ts` #19; `booking.test.ts` #21 |
-| FR-20 | Maintain payment records | Kept until the 1-year retention deletion (see SRS_AUDIT A2) | `jobs.test.ts` #23 |
+| FR-08 | Search and view guest records | List search, filters, sort, pagination; customer detail | `crud.test.ts` "list pages" |
+| FR-09 | Guest linked to reservations | `RESERVATION.CUS_ID`; customer page lists reservations and loyalty account | `schema.test.ts` |
+| FR-10 | Loyalty accounts accumulate and spend points | Loyalty accounts (start at 0); points through payments and Completed | `stay.test.ts` 1001/1002 (75 and 280 points) |
+| FR-11 | Spent at payment, earned at Completed; cancel returns spent; No-Show returns nothing | `booking.ts` (spend), trigger `reservation_points_on_complete` (earn), `finishCancellation` (return) | `stay.test.ts` 1003 and cancellation rules; `db-rules.test.ts` points; `jobs.test.ts` No-Show |
+| FR-12 | Add rooms and room types; update details except the price | Rooms and room types (administrator); `room_price` read-only + trigger `room_price_fixed`; room type/view additions (B18) | `crud.test.ts`, `db-rules.test.ts` room rules, `screens.test.ts` |
+| FR-13 | Availability from dates and check-in/out events | `bookinn.assert_room_free`, `dashboard.roomAvailability` | `db-rules.test.ts` double booking; `screens.test.ts` dashboard; `jobs.test.ts` #25 |
+| FR-14 | Create reservations | New booking form (`/book`), `createBooking` | `booking.test.ts` #1; `stay.test.ts` |
+| FR-15 | View and cancel reservations | Reservation page; Cancel (guest request) | `booking.test.ts` #7, #17; `stay.test.ts` cancellation |
+| FR-16 | Check availability when booking, editing and extending | `assertRoomAvailable` in `booking.ts`, `modify.ts`, `stay.ts`; DB trigger | `booking.test.ts` #5; `stay.test.ts` modification and extension |
+| FR-17 | Prevent duplicate bookings | Server check + DB trigger with room row lock; Booked and Checked-In count | `booking.test.ts` #5, #6, #6b; `db-rules.test.ts` |
+| FR-18 | Accurate reservation records | Constraints, status rules trigger, single transactions, audit trail | `schema.test.ts`, `db-rules.test.ts` |
+| FR-19 | Edit a Booked reservation until the 48-hour cutoff; Modification charge (± ) paid at check-out | `modify.ts`, reservation page *Edit reservation* | `stay.test.ts` 1002 (+3,000), cutoff to the second, modification pricing |
+| FR-20 | Extend during the stay only; Unpaid Extension charge | `stay.extendStay`, reservation page *Extend stay* | `stay.test.ts` 1001 extension, extension into another room |
+| FR-21 | Check-in and check-out per room; early departure; Completed rule | `stay.checkInRoom` / `checkOutRoom`, `rules.tryComplete` | `stay.test.ts` early departure, Completed rule for multi-room |
+| FR-22 | Daily job sets No-Show and emails the guest | `bookinn.mark_no_shows`, `maintenance.ts`, `email.sendNoShowNotice` | `jobs.test.ts` No-Show; `email.test.ts` No-Show notice |
+| FR-23 | Record payment information | Initial at booking, Checkout at settlement; `PAY_TYPE` | `stay.test.ts` 1001 (Tables 13–14) |
+| FR-24 | View and log payment records | Front Desk logs (booking, settlement), Finance views, administrator corrects | `rbac.test.ts`; `booking.test.ts` #21 |
+| FR-25 | Maintain payment records | Kept until the one-year retention deletion | `jobs.test.ts` retention |
+| FR-26 | One Checkout payment = Σ Unpaid charges; Checkout Credit if negative | `stay.settleCheckout`, reservation page *Settle the bill* | `stay.test.ts` 1001, Checkout Credit |
+| FR-27 | 100% refund ≥ 48 h before earliest check-in, none later; unpaid edit charge voided | `rules.finishCancellation` | `stay.test.ts` 1003, cutoff, multi-room earliest check-in |
+| FR-28 | Overdue list for Finance and the administrator, computed not stored | View `bookinn.overdue_reservation`, `overdue.ts`, `/overdue` | `db-rules.test.ts` overdue view; `email.test.ts` overdue list |
+| FR-29 | Daily retention purge, skipping Unpaid; keep guests, loyalty, audit | `bookinn.purge_expired_reservations` | `jobs.test.ts` retention |
 
 ## Business rules (§3.3)
 
 | Rule | Implementation | Verified by |
 |---|---|---|
-| Unique username, one role | `staff_u_name_uq`, case-insensitive `staff_u_name_lower_uq`, `ROLE` enum | `rbac.test.ts` "unique usernames" |
-| Only administrators manage accounts; view-only audit trail; no deleting records with dependents | `perms`, delete guard + `ON DELETE RESTRICT`, append-only trigger | `rbac.test.ts` #19, "refuses to delete"; `schema.test.ts` |
-| Deactivated accounts cannot log in; history kept | `is_active = 'Yes'` checked at login and on every request | `rbac.test.ts` #18 |
-| Unauthorized attempts blocked | `AppError("forbidden")` on the server; RLS for the Data API | `rbac.test.ts` #19, #20; `schema.test.ts` RLS |
-| Password policy, hashed storage | `isStrongPassword`, bcrypt cost 12, `pass` CHECK for bcrypt format | `rbac.test.ts` "password policy" |
-| Guest needs name, email, mobile; unique email | NOT NULL + CHECKs, `customer_email_uq` | `crud.test.ts` "duplicate emails" |
-| Guest profiles and loyalty accounts kept permanently | Retention job never touches them; customers with dependents cannot be deleted | `jobs.test.ts` #23 |
-| Reservations and related records deleted 1 year after latest check-out | `bookinn.purge_expired_reservations()` via daily maintenance | `jobs.test.ts` #23 (idempotent, logged) |
-| Room needs number, type, view, price | PK/FK/NOT NULL, `room_price > 0` | `schema.test.ts` |
-| Double booking: only Booked reservations block | `assert_room_free` trigger, half-open `[in, out)` | `booking.test.ts` #5–#8; `jobs.test.ts` #25 |
-| Booking needs a verified guest, room(s), valid dates, not in the past | `booking.ts` validation (Asia/Manila date) | `booking.test.ts` #2–#4 |
-| Payment settled immediately, once, in full | Reservation + payment + receipt in one transaction; `payment_res_uq`; exact-amount check | `booking.test.ts` #9, #10 |
-| Completed the day after the latest check-out | `bookinn.complete_reservations()` | `jobs.test.ts` "Reservation Completion" |
-| Cancellations: no fee, no refund; Front Desk cancels | `cancelReservation`; payment and points untouched | `booking.test.ts` #17 |
-| No-show stays Booked until check-out passes | No automatic cancellation; completion job handles it | `jobs.test.ts` (completion) |
-| Every payment attaches to one reservation | `payment.res_id` FK + unique | `booking.test.ts` #10 |
-| Payment must equal the amount due | Server-computed due amount; browser total never trusted | `booking.test.ts` #9 |
-| Traceable receipt per payment | Receipt created in the same transaction; `receipt_pay_uq` | `booking.test.ts` #11, #16 |
-| Receipt emailed to the guest | **Not implemented** (no email provider configured); printable receipt page | — (see SRS_AUDIT A6) |
-| Points only when payment is logged | Points change only inside the payment transaction | `booking.test.ts` #1, #12 |
-| Points = payment ÷ 50, decimals dropped | `pointsEarned` | `booking.test.ts` #12 |
-| Cannot earn and spend at once | `pointsFor` + `payment_earn_xor_spend_chk` | `booking.test.ts` #13 |
-| Points final after cancellation | Cancellation does not touch points | `booking.test.ts` #17 |
-| One discount; 100 pts = 12%, 250 pts = free night | `discount_type` enum + `payment_discount_pts_chk` | `booking.test.ts` #14, #15 |
-| 12% of total deducted; free night = one night of the most expensive room; ₱0 allowed | `amountDue` | `booking.test.ts` #15, #16 |
-| Logged reservations not editable; administrator corrects, audited | `perms` (Front Desk has no update), audit triggers | `booking.test.ts` #21 |
-| Audit trail of changes | Triggers on all 10 tables; `STAFF_ID` NULL for system actions | `crud.test.ts` #22; `schema.test.ts` |
+| Unique username, one role; only administrators manage accounts | `staff_u_name_uq`, `staff_u_name_lower_uq`, `perms` | `rbac.test.ts` |
+| Audit trail view-only; no deleting records with dependents; only the purge cascades | Append-only trigger; `guard_dependent_delete` (B4) | `schema.test.ts`; `db-rules.test.ts` delete rules; `rbac.test.ts` |
+| Deactivated accounts cannot log in | `is_active = 'Yes'` at login and on every request | `rbac.test.ts` |
+| Password policy, salted hashes only | `isStrongPassword`, bcrypt, `pass` CHECK | `rbac.test.ts` |
+| Guest needs name, mobile and email (unique) | NOT NULL + CHECKs, `customer_email_uq` | `crud.test.ts` |
+| Data retention 1 year after latest check-out; skip Unpaid; keep guests, loyalty, audit | `purge_expired_reservations` (cascade, purge flag) | `jobs.test.ts` |
+| Room needs number and type; price fixed per type; no price on the reservation | Schema; `room_price_fixed` | `schema.test.ts`, `db-rules.test.ts` |
+| Room Type Rule: type locked once the room has a reservation | Trigger `room_type_locked` | `db-rules.test.ts` |
+| Availability: Booked and Checked-In block; checked-in room blocked until checked out; half-open dates; own rooms left out when editing | `assert_room_free` (B3) | `db-rules.test.ts`, `stay.test.ts` |
+| Extension: same room if free, else another room as a new row | `extendStay` | `stay.test.ts` |
+| Asia/Manila; 48-hour cutoff = earliest check-in 14:00 − 48 h, exactly at the cutoff is on time | `dates.ts` `cutoffFor` / `beforeCutoff` | `stay.test.ts` |
+| Daily job at 00:05 Manila: No-Show → Completed → purge; audit with no staff ID | `vercel.json` (`5 16 * * *` UTC), `maintenance.ts`, SQL functions | `jobs.test.ts`; `email.test.ts` schedule and endpoint |
+| Points credited at Completed (check-out or job); spent deducted at payment, returned at cancellation | Trigger + `booking.ts` + `finishCancellation` | `stay.test.ts`, `db-rules.test.ts` |
+| Overdue computed, not stored or scheduled | View, read on demand | `db-rules.test.ts` |
+| Statuses and transitions (Table 3) | `reservation_status_rules` trigger, flow checks | `db-rules.test.ts` status rules; `stay.test.ts` |
+| Only Booked can be edited or cancelled; only Checked-In extended | `modify.ts`, `finishCancellation`, `extendStay` | `stay.test.ts` |
+| Check-in on or after the check-in date, never before | `checkInRoom`; CHECK `reservation_room_actual_in_chk` | `stay.test.ts`; `db-rules.test.ts` |
+| Early departure shortens the stay, voids unused extension nights, no refund | `checkOutRoom` (B11) | `stay.test.ts` |
+| Booking validity: guest, rooms, valid dates, not in the past | `booking.ts` | `booking.test.ts` #2–#4 |
+| Modification pricing: changed rows re-priced whole; one ± charge; no discount; paid at check-out | `modify.ts` (B10) | `stay.test.ts` modification pricing |
+| Amount due at check-out = Σ Unpaid charges incl. negative ones | `unpaidCharges`, `settleCheckout` | `stay.test.ts` |
+| Guest cancellations only while Booked; no hotel cancellation | `finishCancellation`; no other path | `stay.test.ts` |
+| No-Show handling and notice wording | `mark_no_shows`, `sendNoShowNotice` | `jobs.test.ts`, `email.test.ts` |
+| One Initial, at most one Checkout payment per reservation | `payment_initial_uq`, `payment_checkout_uq` | `db-rules.test.ts` |
+| Charge status Unpaid / Paid / Voided, stored on the charge | `adjustment_charge` CHECKs and trigger | `db-rules.test.ts` |
+| Overpayment guard: payment must equal the amount due | `createBooking`, `settleCheckout`, `preparePayment` | `booking.test.ts` #9; `stay.test.ts` |
+| Traceable receipt per payment, emailed | Receipt in the same transaction; `sendReceipt` after commit | `booking.test.ts` #11; `email.test.ts` |
+| Refunds recorded in REFUND; confirmation emailed | `finishCancellation`, `settleCheckout`; `sendRefundConfirmation` | `stay.test.ts`; `email.test.ts` |
+| Points = payment ÷ 100, decimals dropped; never earn and spend at once | `pointsEarned`, `payment_earn_xor_spend_chk` | `booking.test.ts` #12, #13 |
+| One discount; 100 pts = 12%, 250 pts = free night (most expensive room); Initial only; ₱0 allowed | `amountDue`, `payment_discount_pts_chk`, `payment_checkout_no_discount_chk` | `booking.test.ts` #14–#16; `db-rules.test.ts` |
 
-## Acceptance cases from the brief
+## Emails (SRS §1.4, §3.3)
 
-| # | Case | Test |
+| Email | Trigger (after commit) | Verified by |
 |---|---|---|
-| 1 | Valid reservation persisted | `booking.test.ts` |
-| 2 | Missing customer rejected | `booking.test.ts` |
-| 3 | Check-out on/before check-in rejected | `booking.test.ts` |
-| 4 | Start in the past rejected | `booking.test.ts` |
-| 5 | Overlapping booking rejected | `booking.test.ts` |
-| 6 | Simultaneous conflicting bookings | `booking.test.ts` (+ 6b DB-level) |
-| 7 | Cancellation releases dates | `booking.test.ts` |
-| 8 | Completed does not block | `booking.test.ts` |
-| 9 | Wrong amount rejected | `booking.test.ts` |
-| 10 | Duplicate payment rejected | `booking.test.ts` |
-| 11 | Receipt linked to one payment | `booking.test.ts` |
-| 12 | Points calculation | `booking.test.ts` |
-| 13 | No earn + spend together | `booking.test.ts` |
-| 14 | Insufficient points | `booking.test.ts` |
-| 15 | 12% and free-night totals | `booking.test.ts` |
-| 16 | ₱0 free-night payment | `booking.test.ts` |
-| 17 | Cancellation: no refund, points kept | `booking.test.ts` |
-| 18 | Deactivated account blocked | `rbac.test.ts` |
-| 19 | Role permissions | `rbac.test.ts` |
-| 20 | Unauthorized endpoint access | `rbac.test.ts` (cron endpoint), smoke |
-| 21 | No edits after confirmation | `booking.test.ts` |
-| 22 | Audit entries created | `crud.test.ts`, `schema.test.ts` |
-| 23 | Retention job | `jobs.test.ts` |
-| 24 | CRUD persists | `crud.test.ts` |
-| 25 | Dashboard and availability match the DB | `jobs.test.ts` |
+| Receipt | Every payment: booking (Initial), settlement (Checkout), administrator payment form | `email.test.ts` |
+| Refund confirmation | Every refund: cancellation (button or form), Checkout Credit, administrator refund form | `email.test.ts` |
+| No-Show notice | Daily job, for each reservation set to No-Show | `email.test.ts` |
+| Failure handling | Logged, never rolls back or interrupts; key never logged | `email.test.ts` |
 
 ## Not done or blocked by external setup
 
 | Item | Status |
 |---|---|
-| Receipt and no-show emails | Not implemented: needs an email provider. No-show notices are sent by Front Desk by hand (agreed). |
-| Scheduled maintenance on Vercel | Code and `vercel.json` cron are ready; needs `CRON_SECRET` in Vercel and a deploy before it runs. Not verified on Vercel. |
-| Migration 0003 on Supabase | Not applied yet; tested on a copy of the old schema (`upgrade.test.ts`). |
-| Supabase Auth | Not used; see SRS_AUDIT §2 (credentials stay in `STAFF`). |
+| Migrations 0004–0005 on Supabase | Not applied yet; tested on a copy of the old schema (`upgrade.test.ts`). Run `npm run db:migrate` after a backup. |
+| Resend | Code ready; needs `RESEND_API_KEY`, `RESEND_FROM_EMAIL` and a verified domain. Until then emails are skipped and logged. |
+| Scheduled job on Vercel | `vercel.json` cron and endpoint ready; needs `CRON_SECRET` in Vercel and a deploy. Not verified on Vercel. |
+| Supabase Auth | Not used (SRS: own username and password in STAFF). |

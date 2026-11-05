@@ -33,6 +33,9 @@ export function isRealDate(s: string) {
 
 export const isMoney = (s: string) => MONEY.test(s);
 
+/** A room type name or room view the administrator may add: letters and single spaces, 2–30 characters. */
+export const ROOM_OPTION = /^[A-Za-z](?:[A-Za-z]| (?=[A-Za-z])){1,29}$/;
+
 function fieldSchema(f: FieldDef, mode: Mode): z.ZodType<unknown> {
   const s = z.string().trim();
   switch (f.type) {
@@ -61,6 +64,8 @@ function fieldSchema(f: FieldDef, mode: Mode): z.ZodType<unknown> {
         }
       });
     case "enum": {
+      // Extendable room types/views: the database enum is the list of allowed values.
+      if (f.dbEnum) return s.regex(ROOM_OPTION, "Choose one of the listed values.");
       const opts = (mode === "update" && f.updateOptions) || f.options || [];
       return z.enum(opts as [string, ...string[]], { message: `Choose one of: ${opts.join(", ")}.` });
     }

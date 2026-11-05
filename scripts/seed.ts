@@ -17,6 +17,7 @@ async function main() {
     admin: pick("SEED_ADMIN_PASSWORD"),
     frontDesk: pick("SEED_FRONTDESK_PASSWORD"),
     finance: pick("SEED_FINANCE_PASSWORD"),
+    finance2: pick("SEED_FINANCE2_PASSWORD"),
   };
   const inserted = await seed(getDb(), pw);
   if (!inserted) {
@@ -28,6 +29,7 @@ async function main() {
     { username: SEED_USERNAMES.admin, role: "Database Administrator", password: pw.admin },
     { username: SEED_USERNAMES.frontDesk, role: "Front Desk", password: pw.frontDesk },
     { username: SEED_USERNAMES.finance, role: "Finance", password: pw.finance },
+    { username: SEED_USERNAMES.finance2, role: "Finance", password: pw.finance2 },
   ]);
 }
 

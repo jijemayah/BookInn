@@ -35,8 +35,14 @@ export function Alert({ kind, children }: { kind: "ok" | "error" | "info" | "war
 
 const STATUS_STYLES: Record<string, string> = {
   Booked: "bg-brand-200 text-brand-900",
+  "Checked-In": "bg-brand-800 text-white",
   Completed: "bg-[#e5e7eb] text-[#374151]",
   Cancelled: "bg-danger-soft text-danger",
+  "No-Show": "bg-warn-soft text-warn",
+  "Due in": "bg-warn-soft text-warn",
+  Unpaid: "bg-warn-soft text-warn",
+  Paid: "bg-brand-200 text-brand-900",
+  Voided: "bg-[#e5e7eb] text-[#374151]",
   Yes: "bg-brand-200 text-brand-900",
   No: "bg-[#e5e7eb] text-[#374151]",
 };

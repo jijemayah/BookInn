@@ -2,6 +2,7 @@ import type { Db, Row } from "./db/types";
 import type { Actor } from "./audit";
 import { ENTITIES, canRead, writableFields, type EntityDef } from "./entities";
 import { refOptions } from "./crud";
+import { enumValues } from "./room-options";
 import type { FormField } from "@/components/forms";
 import type { Mode } from "./validation";
 
@@ -15,7 +16,7 @@ export async function buildFormFields(db: Db, actor: Actor, e: EntityDef, mode: 
     if (!writable.has(f.name) && !immutable) continue; // fields this role can't set are not shown
     let options: FormField["options"];
     if (f.type === "enum") {
-      const opts = (mode === "update" && f.updateOptions) || f.options || [];
+      const opts = f.dbEnum ? await enumValues(db, f.dbEnum) : (mode === "update" && f.updateOptions) || f.options || [];
       options = opts.map((o) => ({ value: o, label: o }));
     } else if (f.type === "ref") {
       const target = ENTITIES[f.ref!];

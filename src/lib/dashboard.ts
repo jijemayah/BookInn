@@ -17,8 +17,14 @@ export type RoomAvailability = {
   blocked_by: number | null;
 };
 
-/** Rooms free for the whole stay [from, to): no Booked reservation overlaps. */
-export async function roomAvailability(db: Db, actor: Actor, from: string, to: string): Promise<RoomAvailability[]> {
+/**
+ * Rooms free for the whole stay [from, to), computed from dates and check-in
+ * and check-out events (SRS v2 FR-13, §3.3 Room Availability): a Booked or
+ * Checked-In reservation's room blocks its dates until it is checked out, and
+ * a checked-in room past its check-out date stays blocked through today.
+ * Same rule as the database's bookinn.assert_room_free.
+ */
+export async function roomAvailability(db: Db, actor: Actor, from: string, to: string, today = hotelToday()): Promise<RoomAvailability[]> {
   assertCan(actor, ENTITIES.room, "read");
   const r = await db.query<RoomAvailability>(
     `SELECT ro.room_no, ro.room_type_id, d.room_type::text, d.room_view::text, d.room_price::text,
@@ -28,11 +34,14 @@ export async function roomAvailability(db: Db, actor: Actor, from: string, to: s
        LEFT JOIN LATERAL (
             SELECT rr.res_id FROM bookinn.reservation_room rr
               JOIN bookinn.reservation r ON r.res_id = rr.res_id
-             WHERE rr.room_no = ro.room_no AND r.booking_status = 'Booked'
-               AND rr.check_in_date < $2::date AND rr.check_out_date > $1::date
+             WHERE rr.room_no = ro.room_no AND r.booking_status IN ('Booked', 'Checked-In')
+               AND rr.actual_check_out IS NULL
+               AND rr.check_in_date < $2::date
+               AND CASE WHEN rr.actual_check_in IS NOT NULL THEN GREATEST(rr.check_out_date, $3::date + 1)
+                        ELSE rr.check_out_date END > $1::date
              LIMIT 1) b ON true
       ORDER BY ro.room_no`,
-    [from, to],
+    [from, to, today],
   );
   return r.rows;
 }
@@ -45,8 +54,10 @@ export interface DashboardStats {
   inHouse: number;
   upcoming: number;
   booked: number;
+  checkedIn: number;
   completed: number;
   cancelled: number;
+  noShow: number;
   payments: number;
   revenueCents: number;
   revenueThisMonthCents: number;
@@ -62,10 +73,10 @@ export async function dashboardStats(db: Db, actor: Actor, today = hotelToday())
   const [customers, rooms, inHouse, upcoming, statuses, pay, payMonth, loyalty, arrivals, avail] = await Promise.all([
     one("SELECT count(*)::text AS v FROM bookinn.customer"),
     one("SELECT count(*)::text AS v FROM bookinn.room"),
+    // In-house = rooms checked in and not yet checked out (check-in/out events, not dates).
     one(
-      `SELECT count(DISTINCT r.res_id)::text AS v FROM bookinn.reservation r JOIN bookinn.reservation_room rr ON rr.res_id = r.res_id
-        WHERE r.booking_status = 'Booked' AND rr.check_in_date <= $1::date AND rr.check_out_date > $1::date`,
-      [today],
+      `SELECT count(*)::text AS v FROM bookinn.reservation_room rr JOIN bookinn.reservation r ON r.res_id = rr.res_id
+        WHERE r.booking_status = 'Checked-In' AND rr.actual_check_in IS NOT NULL AND rr.actual_check_out IS NULL`,
     ),
     one(
       `SELECT count(*)::text AS v FROM bookinn.reservation r
@@ -86,11 +97,11 @@ export async function dashboardStats(db: Db, actor: Actor, today = hotelToday())
          FROM bookinn.reservation r
          JOIN bookinn.customer c ON c.cus_id = r.cus_id
          JOIN bookinn.reservation_room rr ON rr.res_id = r.res_id
-        WHERE r.booking_status = 'Booked' AND rr.check_out_date > $1::date
+        WHERE r.booking_status IN ('Booked', 'Checked-In') AND rr.actual_check_out IS NULL AND rr.check_out_date > $1::date
         ORDER BY rr.check_in_date, rr.room_no LIMIT 8`,
       [today],
     ),
-    roomAvailability(db, actor, today, addDays(today, 1)),
+    roomAvailability(db, actor, today, addDays(today, 1), today),
   ]);
   const byStatus = Object.fromEntries(statuses.rows.map((s) => [s.booking_status, Number(s.n)]));
   return {
@@ -101,8 +112,10 @@ export async function dashboardStats(db: Db, actor: Actor, today = hotelToday())
     inHouse: Number(inHouse),
     upcoming: Number(upcoming),
     booked: byStatus.Booked ?? 0,
+    checkedIn: byStatus["Checked-In"] ?? 0,
     completed: byStatus.Completed ?? 0,
     cancelled: byStatus.Cancelled ?? 0,
+    noShow: byStatus["No-Show"] ?? 0,
     payments: Number(pay.rows[0].n),
     revenueCents: toCents(pay.rows[0].total),
     revenueThisMonthCents: toCents(payMonth ?? "0"),

@@ -1,22 +1,26 @@
 /**
- * Front Desk booking flow (FR-13 – FR-18, SRS §3.3 Reservations and Payments).
+ * Front Desk booking flow (SRS v2 FR-14 – FR-18, §3.3 Reservations, Payments).
  *
- * A reservation, its reserved rooms, its single full payment, the receipt and
- * the loyalty balance change are written in ONE transaction, so a reservation
- * can never exist unpaid and points can never be applied twice. All amounts
- * are computed here from ROOM_DETAILS prices; nothing the browser sends about
- * money is trusted except the amount tendered, which must equal the amount due.
+ * A reservation, its reserved rooms, its Initial payment (paid upfront), the
+ * receipt and the deduction of spent points are written in ONE transaction,
+ * so a reservation can never exist unpaid and points can never be applied
+ * twice. Earned points are stored on the payment and credited only when the
+ * reservation becomes Completed (database trigger, migration 0005). All
+ * amounts are computed here from ROOM_DETAILS prices; nothing the browser
+ * sends about money is trusted except the amount tendered, which must equal
+ * the amount due.
  */
 import { z } from "zod";
 import type { Db } from "./db/types";
 import { ENTITIES, ENUMS } from "./entities";
 import { AppError } from "./errors";
-import { setActor, type Actor } from "./audit";
+import { setActor, setHotelDay, type Actor } from "./audit";
 import { assertCan, mapDbError } from "./crud";
-import { assertRoomAvailable, lockReservation } from "./rules";
+import { adjustPoints, assertRoomAvailable, finishCancellation, lockReservation } from "./rules";
 import { amountDue, DISCOUNT_POINTS, pointsFor, toCents, peso, type Discount } from "./money";
-import { hotelToday, nightsBetween } from "./dates";
+import { hotelNow, hotelToday, nightsBetween } from "./dates";
 import { isMoney, isRealDate } from "./validation";
+import { sendFor } from "./email";
 
 export interface StayInput {
   room_no: string;
@@ -175,7 +179,10 @@ export async function quoteBooking(db: Db, actor: Actor, input: BookingInput, to
   assertBookingRole(actor);
   const data = parse(input);
   try {
-    return await db.tx((t) => price(t, data, today, false));
+    return await db.tx(async (t) => {
+      await setHotelDay(t, today);
+      return price(t, data, today, false);
+    });
   } catch (err) {
     mapDbError(err);
   }
@@ -191,14 +198,16 @@ export async function createBooking(db: Db, actor: Actor, input: BookingInput, t
   const amt = String(input.pay_amt ?? "").trim();
   if (!isMoney(amt)) throw new AppError("validation", "Enter the amount paid, e.g. 3000 or 3000.00.", { pay_amt: "Invalid amount." });
 
+  let saved;
   try {
-    return await db.tx(async (t) => {
+    saved = await db.tx(async (t) => {
       await setActor(t, actor);
+      await setHotelDay(t, today);
       const quote = await price(t, data, today, true);
       if (toCents(amt) !== quote.dueCents)
         throw new AppError(
           "validation",
-          `Reservations are paid once, in full. The amount paid must be exactly ${peso(quote.dueCents)}.`,
+          `The booking is paid upfront in full. The Initial payment must be exactly ${peso(quote.dueCents)}.`,
           { pay_amt: `Amount due is ${peso(quote.dueCents)}.` },
         );
 
@@ -213,15 +222,12 @@ export async function createBooking(db: Db, actor: Actor, input: BookingInput, t
           [resId, l.room_no, l.check_in_date, l.check_out_date],
         );
 
-      if (quote.loyalty && quote.pointsEarn - quote.pointsSpend !== 0)
-        await t.query("UPDATE bookinn.loyalty_acc SET total_pts = total_pts + $2 WHERE lyl_id = $1", [
-          quote.loyalty.lyl_id,
-          quote.pointsEarn - quote.pointsSpend,
-        ]);
+      // Spent points are deducted at payment; earned points wait for Completed.
+      if (quote.loyalty && quote.pointsSpend > 0) await adjustPoints(t, quote.loyalty.lyl_id, -quote.pointsSpend);
 
       const pay = await t.query<{ pay_id: number }>(
-        `INSERT INTO bookinn.payment (res_id, pay_method, pay_date, pay_amt, pts_earn, pts_spend, discount_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING pay_id`,
+        `INSERT INTO bookinn.payment (res_id, pay_type, pay_method, pay_date, pay_amt, pts_earn, pts_spend, discount_type)
+         VALUES ($1, 'Initial', $2, $3, $4, $5, $6, $7) RETURNING pay_id`,
         [resId, method, today, amt, quote.pointsEarn, quote.pointsSpend, quote.discount],
       );
       const payId = pay.rows[0].pay_id;
@@ -231,14 +237,26 @@ export async function createBooking(db: Db, actor: Actor, input: BookingInput, t
   } catch (err) {
     mapDbError(err);
   }
+  // After commit: the receipt goes to the guest's email (never fails the booking).
+  const emails = await sendFor(db, { payIds: [saved.payId] });
+  return { ...saved, emails };
 }
 
-/** FR-14 cancel: creates the CANCELLATION record and sets the status, in one transaction. No refund. */
-export async function cancelReservation(db: Db, actor: Actor, resId: string | number, today = hotelToday()) {
+/**
+ * Guest cancellation through the Front Desk (FR-15, FR-27, §3.3 Cancellations):
+ * only while Booked. At least 48 hours before the earliest check-in at 14:00
+ * (Asia/Manila) the amount paid is refunded in full; later, no refund. Unpaid
+ * charges are voided, spent points are returned, earned points are never
+ * credited. One transaction: CANCELLATION, REFUND, charges, points, status.
+ */
+export async function cancelReservation(db: Db, actor: Actor, resId: string | number, now: Date = new Date()) {
   assertCan(actor, ENTITIES.cancellation, "create");
+  const today = hotelToday(now);
+  let saved;
   try {
-    return await db.tx(async (t) => {
+    saved = await db.tx(async (t) => {
       await setActor(t, actor);
+      await setHotelDay(t, today);
       const res = await lockReservation(t, resId);
       if (res.booking_status !== "Booked")
         throw new AppError("conflict", `Only Booked reservations can be cancelled; #${res.res_id} is ${res.booking_status}.`);
@@ -246,10 +264,13 @@ export async function cancelReservation(db: Db, actor: Actor, resId: string | nu
         "INSERT INTO bookinn.cancellation (res_id, cancel_date) VALUES ($1, $2) RETURNING cancel_id",
         [res.res_id, today],
       );
-      await t.query("UPDATE bookinn.reservation SET booking_status = 'Cancelled' WHERE res_id = $1", [res.res_id]);
-      return { cancelId: c.rows[0].cancel_id };
+      const outcome = await finishCancellation(t, res, hotelNow(now), today);
+      return { cancelId: c.rows[0].cancel_id, ...outcome };
     });
   } catch (err) {
     mapDbError(err);
   }
+  // After commit: refund confirmation by email when a refund was recorded.
+  const emails = await sendFor(db, { refundIds: [saved.refundId] });
+  return { ...saved, emails };
 }

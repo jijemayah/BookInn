@@ -9,6 +9,10 @@ import { getDb } from "@/lib/db/pg";
 import { createRow, deleteRow, updateRow } from "@/lib/crud";
 import { cancelReservation, createBooking, quoteBooking, type BookingInput, type Quote } from "@/lib/booking";
 import { runMaintenance, type MaintenanceResult } from "@/lib/maintenance";
+import { modifyReservation, type ModifyStayInput } from "@/lib/modify";
+import { checkInRoom, checkOutRoom, extendStay, settleCheckout } from "@/lib/stay";
+import { addRoomOption } from "@/lib/room-options";
+import type { EmailOutcome } from "@/lib/email";
 import { DBA, ENTITIES, isEntityKey } from "@/lib/entities";
 import { AppError, isAppError } from "@/lib/errors";
 import { changeOwnPassword, updateOwnName, verifyCredentials } from "@/lib/staff-auth";
@@ -172,26 +176,122 @@ export async function bookingAction(_prev: BookingState, fd: FormData): Promise<
     }
   }
   let resId: number;
+  let emails: EmailOutcome[] | undefined;
   try {
-    resId = (await createBooking(db, a, input)).resId;
+    ({ resId, emails } = await createBooking(db, a, input));
   } catch (err) {
     // Re-price so the summary stays visible next to the error when possible.
     const quote = await quoteBooking(db, a, input).catch(() => undefined);
     return { ...fail(err, values), quote, rooms };
   }
   revalidatePath("/reservation");
-  redirect(`/reservation/${resId}?saved=booked`);
+  redirect(resUrl(resId, "booked", emailParam(emails)));
 }
+
+/** Summarises the email outcomes of a flow for the page notice (?email=sent|skipped|failed). */
+function emailParam(emails?: EmailOutcome[]) {
+  if (!emails?.length) return "";
+  const s = emails.some((e) => e.status === "failed") ? "failed" : emails.some((e) => e.status === "skipped") ? "skipped" : "sent";
+  return `&email=${s}`;
+}
+
+const resUrl = (resId: string | number, saved: string, extra = "") => `/reservation/${encodeURIComponent(String(resId))}?saved=${saved}${extra}`;
 
 export async function cancelReservationAction(resId: string, _prev: FormState): Promise<FormState> {
   const a = await actor();
+  let url: string;
   try {
-    await cancelReservation(getDb(), a, resId);
+    const c = await cancelReservation(getDb(), a, resId);
+    url = resUrl(resId, c.refundId ? "cancelled_refund" : "cancelled_norefund", emailParam(c.emails));
   } catch (err) {
     return fail(err, {});
   }
   revalidatePath("/reservation");
-  redirect(`/reservation/${encodeURIComponent(resId)}?saved=cancelled`);
+  redirect(url);
+}
+
+// ---------------------------------------------------------------- stay (Front Desk)
+export async function checkInAction(resId: string, resRoomId: string, _prev: FormState): Promise<FormState> {
+  const a = await actor();
+  try {
+    await checkInRoom(getDb(), a, resRoomId);
+  } catch (err) {
+    return fail(err, {});
+  }
+  revalidatePath("/reservation");
+  redirect(resUrl(resId, "checked_in"));
+}
+
+export async function checkOutAction(resId: string, resRoomId: string, _prev: FormState): Promise<FormState> {
+  const a = await actor();
+  let url: string;
+  try {
+    const r = await checkOutRoom(getDb(), a, resRoomId);
+    url = resUrl(resId, r.completed ? "checked_out_completed" : r.lastRoom && r.unpaidCount > 0 ? "checked_out_settle" : "checked_out");
+  } catch (err) {
+    return fail(err, {});
+  }
+  revalidatePath("/reservation");
+  redirect(url);
+}
+
+export async function extendAction(resId: string, resRoomId: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const a = await actor();
+  const input = formToInput(fd);
+  try {
+    await extendStay(getDb(), a, resRoomId, String(input.new_check_out ?? ""), { roomNo: input.room_no || undefined });
+  } catch (err) {
+    return fail(err, input);
+  }
+  revalidatePath("/reservation");
+  redirect(resUrl(resId, "extended"));
+}
+
+export async function modifyAction(resId: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const a = await actor();
+  const input = formToInput(fd);
+  // Existing rows: room_<id>, in_<id>, out_<id>, remove_<id>. One optional new row: new_room, new_in, new_out.
+  const ids = fd.getAll("row").map(String);
+  const stays: ModifyStayInput[] = ids
+    .filter((id) => input[`remove_${id}`] !== "on")
+    .map((id) => ({ res_room_id: id, room_no: input[`room_${id}`] ?? "", check_in_date: input[`in_${id}`] ?? "", check_out_date: input[`out_${id}`] ?? "" }));
+  if (input.new_room) stays.push({ room_no: input.new_room, check_in_date: input.new_in ?? "", check_out_date: input.new_out ?? "" });
+  let url: string;
+  try {
+    const m = await modifyReservation(getDb(), a, resId, stays);
+    url = resUrl(resId, m.differenceCents > 0 ? "modified_up" : m.differenceCents < 0 ? "modified_down" : "modified");
+  } catch (err) {
+    return fail(err, input);
+  }
+  revalidatePath("/reservation");
+  redirect(url);
+}
+
+export async function settleAction(resId: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const a = await actor();
+  const input = formToInput(fd);
+  let url: string;
+  try {
+    const s = await settleCheckout(getDb(), a, resId, { pay_method: input.pay_method, pay_amt: input.pay_amt });
+    url = resUrl(resId, s.payId ? "settled_payment" : s.refundId ? "settled_credit" : "settled_zero", emailParam(s.emails));
+  } catch (err) {
+    return fail(err, input);
+  }
+  revalidatePath("/reservation");
+  redirect(url);
+}
+
+// ---------------------------------------------------------------- room types and views (administrator)
+export async function addRoomOptionAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const a = await actor();
+  const input = formToInput(fd);
+  try {
+    const r = await addRoomOption(getDb(), a, input.kind === "room_view" ? "room_view" : "room_type", String(input.value ?? ""));
+    revalidatePath("/room_details");
+    return { ok: `Added ${r.kind === "room_view" ? "room view" : "room type"} "${r.value}". It can now be chosen when creating a room type.` };
+  } catch (err) {
+    return fail(err, input);
+  }
 }
 
 // ---------------------------------------------------------------- maintenance
@@ -202,7 +302,11 @@ export async function runMaintenanceAction(_prev: FormState & { result?: Mainten
     const result = await runMaintenance(getDb(), { staffId: a.staffId });
     revalidatePath("/", "layout");
     return {
-      ok: `Maintenance for ${result.today}: ${result.completed} reservation(s) marked Completed, ${result.purged} expired reservation(s) deleted.`,
+      ok:
+        `Daily job for ${result.today}: ${result.noShows.length} reservation(s) set to No-Show, ` +
+        `${result.completed} marked Completed, ${result.purged} expired reservation(s) deleted. ` +
+        `No-Show emails: ${result.emails.filter((e) => e.status === "sent").length} sent, ` +
+        `${result.emails.filter((e) => e.status === "skipped").length} skipped, ${result.emails.filter((e) => e.status === "failed").length} failed.`,
       result,
     };
   } catch (err) {

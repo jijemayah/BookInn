@@ -149,6 +149,56 @@ export function ConfirmButton({
   );
 }
 
+/**
+ * A small form for one server action (check in, extend, settle…). The fields
+ * are passed as children (rendered on the server); errors from the action are
+ * shown above them. With `confirmText`, the browser asks before submitting.
+ */
+export function ActionForm({
+  action,
+  submitLabel,
+  pendingLabel = "Working…",
+  confirmText,
+  variant = "primary",
+  className = "flex flex-wrap items-end gap-3",
+  children,
+}: {
+  action: Action;
+  submitLabel: string;
+  pendingLabel?: string;
+  confirmText?: string;
+  variant?: "danger" | "secondary" | "primary";
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  const [state, formAction, pending] = useActionState(action, {});
+  return (
+    <form
+      action={formAction}
+      onSubmit={(e) => {
+        if (confirmText && !confirm(confirmText)) e.preventDefault();
+      }}
+    >
+      {state.error && (
+        <p role="alert" className="mb-3 rounded-md border border-[#f5c2bd] bg-danger-soft px-4 py-3 text-sm text-danger">
+          {state.error}
+        </p>
+      )}
+      {state.ok && (
+        <p role="status" className="mb-3 rounded-md border border-brand-300 bg-brand-100 px-4 py-3 text-sm text-brand-900">
+          {state.ok}
+        </p>
+      )}
+      <div className={className}>
+        {children}
+        <button type="submit" className={`btn btn-${variant}`} disabled={pending}>
+          {pending ? pendingLabel : submitLabel}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function SimpleField({ name, label, type = "text", autoComplete, state, defaultValue }: {
   name: string; label: string; type?: string; autoComplete?: string; state: FormState; defaultValue?: string;
 }) {

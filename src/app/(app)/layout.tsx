@@ -1,5 +1,5 @@
 import { requireStaff } from "@/lib/session";
-import { DBA, ENTITIES, can, type EntityKey } from "@/lib/entities";
+import { DBA, ENTITIES, FIN, can, type EntityKey } from "@/lib/entities";
 import { logoutAction } from "@/app/actions";
 import { MobileMenu, NavLinks, type NavItem } from "@/components/nav";
 
@@ -15,7 +15,16 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     },
     { title: "Front office", items: [...link("reservation"), ...link("customer"), ...link("loyalty_acc"), ...link("cancellation")] },
     { title: "Rooms", items: [...link("room"), ...link("room_details")] },
-    { title: "Payments", items: [...link("payment"), ...link("receipt")] },
+    {
+      title: "Payments",
+      items: [
+        ...link("payment"),
+        ...link("receipt"),
+        ...link("adjustment_charge"),
+        ...link("refund"),
+        ...(staff.role === FIN || staff.role === DBA ? [{ href: "/overdue", label: "Overdue" }] : []),
+      ],
+    },
     ...(staff.role === DBA ? [{ title: "Administration", items: [...link("staff"), ...link("audit_trail"), ...link("reservation_room")] }] : []),
   ].filter((g) => g.items.length > 0);
 

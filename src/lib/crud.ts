@@ -6,7 +6,8 @@
 import type { Db, Row } from "./db/types";
 import { ENTITIES, ENTITY_KEYS, can, type EntityDef, type EntityKey, type Op } from "./entities";
 import { AppError, isAppError } from "./errors";
-import { setActor, type Actor } from "./audit";
+import { setActor, setHotelDay, type Actor } from "./audit";
+import { sendFor } from "./email";
 import { parseInput, type FormInput } from "./validation";
 import * as rules from "./rules";
 
@@ -154,20 +155,32 @@ export async function createRow(db: Db, actor: Actor, key: EntityKey, input: For
   if (key === "reservation")
     throw new AppError("validation", "Reservations are created with their rooms and payment on the New booking form.");
   const parsed = parseInput(e, "create", input, actor.role);
-  return run(e, () =>
+  const row = await run(e, () =>
     db.tx(async (t) => {
       await setActor(t, actor);
+      if (today) await setHotelDay(t, today);
       const v = await rules.beforeCreate(t, e, parsed, actor, today);
       const cols = Object.keys(v);
       const r = await t.query(
         `INSERT INTO ${e.table} (${cols.map(q).join(", ")}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")}) RETURNING *`,
         cols.map((c) => v[c]),
       );
-      const row = r.rows[0];
-      await rules.afterCreate(t, e, row);
-      return row;
+      const created = r.rows[0];
+      await rules.afterCreate(t, e, created, today);
+      return created;
     }),
   );
+  // After commit: every payment gets a receipt email and every refund a confirmation (never fails the save).
+  if (key === "payment") await sendFor(db, { payIds: [Number(row.pay_id)] });
+  if (key === "refund") await sendFor(db, { refundIds: [Number(row.refund_id)] });
+  if (key === "cancellation") {
+    const refund = await db.query<{ refund_id: number }>(
+      "SELECT refund_id FROM bookinn.refund WHERE res_id = $1 AND refund_type = 'Cancellation'",
+      [row.res_id],
+    );
+    await sendFor(db, { refundIds: refund.rows.map((x) => x.refund_id) });
+  }
+  return row;
 }
 
 export async function updateRow(db: Db, actor: Actor, key: EntityKey, id: string | number, input: FormInput) {
@@ -219,7 +232,13 @@ const CONSTRAINT_MESSAGES: Record<string, [string, string]> = {
   customer_email_uq: ["cus_email", "A customer with this email already exists."],
   loyalty_acc_cus_uq: ["cus_id", "This customer already has a loyalty account."],
   loyalty_acc_pts_chk: ["discount_type", "Not enough loyalty points."],
-  payment_res_uq: ["res_id", "This reservation already has a payment (one-time payment rule)."],
+  payment_initial_uq: ["res_id", "This reservation already has its Initial payment."],
+  payment_checkout_uq: ["res_id", "This reservation already has its Checkout payment."],
+  payment_checkout_no_discount_chk: ["discount_type", "Checkout payments use no discount (NONE) and spend no points."],
+  refund_cancellation_uq: ["res_id", "This reservation already has a Cancellation refund."],
+  refund_checkout_credit_uq: ["res_id", "This reservation already has a Checkout Credit refund."],
+  reservation_room_actual_in_chk: ["actual_check_in", "A room cannot be checked in before its check-in date."],
+  reservation_room_actual_out_chk: ["actual_check_out", "Check-out must be after the room's check-in."],
   receipt_pay_uq: ["pay_id", "This payment already has a receipt."],
   cancellation_res_uq: ["res_id", "This reservation already has a cancellation record."],
   staff_u_name_uq: ["u_name", "That username is already taken."],
@@ -227,11 +246,24 @@ const CONSTRAINT_MESSAGES: Record<string, [string, string]> = {
   reservation_room_dates_chk: ["check_out_date", "Check-out date must be after check-in date."],
 };
 
+const RULE_TRIGGERS = new Set([
+  "room_price_fixed",
+  "room_type_locked",
+  "reservation_status_rule",
+  "adjustment_charge_room_res",
+  "adjustment_charge_extension_room",
+  "adjustment_charge_extension_amt",
+  "adjustment_charge_checkout_payment",
+]);
+
 export function mapDbError(err: unknown, e?: EntityDef): never {
   if (isAppError(err)) throw err;
   const pg = err as { code?: string; constraint?: string; detail?: string; message?: string };
   if (pg.code === "23P01" && pg.constraint === "room_double_booking")
     throw new AppError("conflict", pg.message ?? "Room is not available for these dates.", { room_no: "Not available for these dates." });
+  // Business rules raised by database triggers carry a readable message (migration 0005).
+  if (pg.code === "23514" && pg.constraint && RULE_TRIGGERS.has(pg.constraint))
+    throw new AppError("conflict", pg.message ?? "This change breaks a business rule.");
   const known = pg.constraint ? CONSTRAINT_MESSAGES[pg.constraint] : undefined;
   if (known) throw new AppError(pg.code === "23505" ? "conflict" : "validation", known[1], { [known[0]]: known[1] });
   switch (pg.code) {
@@ -249,8 +281,10 @@ export function mapDbError(err: unknown, e?: EntityDef): never {
           : "A referenced record does not exist.",
       );
     }
-    case "23514":
     case "22P02":
+      if (/enum/i.test(pg.message ?? "")) throw new AppError("validation", "Choose one of the listed values.");
+    // falls through
+    case "23514":
     case "22001":
     case "22003":
       throw new AppError("validation", `Invalid value (${pg.constraint ?? pg.code}).`);

@@ -3,6 +3,7 @@ import { RAW_STRING_OIDS, type Db, type Row } from "@/lib/db/types";
 import { migrate } from "@/lib/db/migrate";
 import { seed } from "@/lib/db/seed";
 import type { Actor } from "@/lib/audit";
+import { atHotelTime } from "@/lib/dates";
 
 const parsers = Object.fromEntries(Object.values(RAW_STRING_OIDS).map((oid) => [oid, (v: string) => v]));
 
@@ -18,7 +19,7 @@ function wrap(conn: PGlite | Transaction): Db {
   };
 }
 
-export const PASSWORDS = { admin: "Admin#2026x", frontDesk: "Front#Desk2026", finance: "Finance#2026" };
+export const PASSWORDS = { admin: "Admin#2026x", frontDesk: "Front#Desk2026", finance: "Finance#2026", finance2: "Finance2#2026" };
 
 /** Fresh in-memory Postgres with the real migrations and (optionally) the corrected seed data. */
 export async function freshDb(withSeed = true) {
@@ -35,6 +36,8 @@ export const ADMIN: Actor = { staffId: 1003, role: "Database Administrator" };
 
 /** "Today" for tests, in the hotel time zone (after the seeded pay dates, before booking 1004). */
 export const TODAY = "2026-11-01";
+/** "Now" for tests: 10:00 hotel time on TODAY. */
+export const NOW = atHotelTime(`${TODAY} 10:00:00`);
 
 export async function auditFor(db: Db, table: string, recId: string | number) {
   const r = await db.query<{ action: string; old_data: string | null; new_data: string | null; staff_id: number | null }>(

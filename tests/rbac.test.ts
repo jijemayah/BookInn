@@ -6,7 +6,7 @@ import { cancelReservation, createBooking, quoteBooking } from "@/lib/booking";
 import { dashboardStats } from "@/lib/dashboard";
 import { changeOwnPassword, loadActiveStaff, readSessionToken, signSession, updateOwnName, verifyCredentials } from "@/lib/staff-auth";
 import { isAuthorizedCron } from "@/lib/cron-auth";
-import { ADMIN, FINANCE, FRONT_DESK, PASSWORDS, TODAY, freshDb } from "./helpers";
+import { ADMIN, FINANCE, FRONT_DESK, NOW, PASSWORDS, TODAY, freshDb } from "./helpers";
 
 let db: Db;
 let close: () => Promise<void>;
@@ -17,7 +17,7 @@ const booking = { cus_id: "1002", discount_type: "NONE", stays: [{ room_no: "205
 
 describe("19. permissions follow the SRS permission table", () => {
   it("Finance can read everything operational but change nothing", async () => {
-    for (const k of ["customer", "loyalty_acc", "room", "room_details", "reservation", "reservation_room", "payment", "receipt", "cancellation"] as const)
+    for (const k of ["customer", "loyalty_acc", "room", "room_details", "reservation", "reservation_room", "payment", "receipt", "cancellation", "adjustment_charge", "refund"] as const)
       expect(Array.isArray(await listRows(db, FINANCE, k))).toBe(true);
     expect((await dashboardStats(db, FINANCE, TODAY)).customers).toBe(2);
     await expect(createRow(db, FINANCE, "customer", { cus_name: "X", cus_email: "x@x.co", cus_mobile: "0917000000" })).rejects.toMatchObject({ code: "forbidden" });
@@ -25,7 +25,8 @@ describe("19. permissions follow the SRS permission table", () => {
     await expect(createBooking(db, FINANCE, { ...booking, pay_method: "Cash", pay_amt: "1500" }, TODAY)).rejects.toMatchObject({ code: "forbidden" });
     await expect(updateRow(db, FINANCE, "payment", 1001, { pay_method: "Cash", pay_date: "2026-06-20", pay_amt: "6000", discount_type: "NONE" }))
       .rejects.toMatchObject({ code: "forbidden" });
-    await expect(cancelReservation(db, FINANCE, 1004, TODAY)).rejects.toMatchObject({ code: "forbidden" });
+    await expect(cancelReservation(db, FINANCE, 1004, NOW)).rejects.toMatchObject({ code: "forbidden" });
+    await expect(createRow(db, FINANCE, "refund", { res_id: "1004", refund_type: "Cancellation", refund_amt: "1", refund_date: TODAY })).rejects.toMatchObject({ code: "forbidden" });
     await expect(createRow(db, FINANCE, "loyalty_acc", { cus_id: "1001" })).rejects.toMatchObject({ code: "forbidden" });
     await expect(listRows(db, FINANCE, "staff")).rejects.toMatchObject({ code: "forbidden" });
     await expect(listRows(db, FINANCE, "audit_trail")).rejects.toMatchObject({ code: "forbidden" });
@@ -53,7 +54,7 @@ describe("19. permissions follow the SRS permission table", () => {
     await expect(listRows(db, FRONT_DESK, "audit_trail")).rejects.toMatchObject({ code: "forbidden" });
 
     const b = await createBooking(db, FRONT_DESK, { ...booking, pay_method: "Cash", pay_amt: "1500" }, TODAY);
-    await cancelReservation(db, FRONT_DESK, b.resId, TODAY);
+    await cancelReservation(db, FRONT_DESK, b.resId, NOW);
   });
 
   it("the Database Administrator can do everything except edit or delete the audit trail", async () => {

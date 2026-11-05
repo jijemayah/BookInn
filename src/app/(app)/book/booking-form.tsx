@@ -18,7 +18,7 @@ type Stay = { in: string; out: string };
 
 /**
  * Two-step booking form: Review prices the stay on the server; Confirm saves
- * the reservation together with its one full payment and receipt. Every room
+ * the reservation together with its Initial payment (paid upfront) and receipt. Every room
  * in the reservation has its own check-in and check-out dates.
  */
 export function BookingForm({
@@ -172,15 +172,18 @@ export function BookingForm({
               </table>
             </div>
             <p className="mt-3 text-sm text-muted">
-              {q.pointsEarn > 0 && `Earns ${q.pointsEarn} points.`}
+              {q.pointsEarn > 0 && `Earns ${q.pointsEarn} points, credited when the stay is Completed.`}
               {q.pointsSpend > 0 && `Uses ${q.pointsSpend} points.`}
               {!q.loyalty && "No loyalty account."}
             </p>
           </section>
 
           <section className="card grid gap-5" aria-labelledby="pay-h">
-            <h2 id="pay-h">3. Record the full payment</h2>
-            <p className="text-sm text-muted">Reservations are locked once confirmed.</p>
+            <h2 id="pay-h">3. Record the Initial payment (paid upfront)</h2>
+            <p className="text-sm text-muted">
+              Later changes are made on the reservation page: edits until 48 hours before check-in and extensions during the stay
+              are posted as charges and paid at check-out. The receipt is emailed to the guest.
+            </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1">
                 <label htmlFor="pay_method">Payment method <span aria-hidden="true" className="text-danger">*</span></label>

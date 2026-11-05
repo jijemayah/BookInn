@@ -45,7 +45,11 @@ describe("CRUD lifecycle per entity", () => {
   it("ROOM_DETAILS and ROOM (administrator; natural keys)", async () => {
     await createRow(db, ADMIN, "room_details", { room_type_id: "RT09", room_type: "Deluxe", room_price: "4200.50", room_view: "City View" });
     expect((await getRow(db, ADMIN, "room_details", "RT09")).room_price).toBe("4200.50");
-    await updateRow(db, ADMIN, "room_details", "RT09", { room_type: "Deluxe", room_price: "4500", room_view: "Garden View" });
+    // ROOM_PRICE is fixed once the room type exists (SRS v2 Room Type Rule): the form ignores a
+    // submitted price (read-only field) and the database refuses any direct change; other details can change.
+    const upd = await updateRow(db, ADMIN, "room_details", "RT09", { room_type: "Deluxe", room_price: "4500", room_view: "Garden View" });
+    expect(upd.room_price).toBe("4200.50");
+    await expect(db.query("UPDATE bookinn.room_details SET room_price = 4500 WHERE room_type_id = 'RT09'")).rejects.toThrow(/ROOM_PRICE is fixed/);
     await createRow(db, ADMIN, "room", { room_no: "501", room_type_id: "RT09" });
     expect((await getRow(db, FRONT_DESK, "room", 501)).room_type_id__label).toContain("Garden View");
     await updateRow(db, ADMIN, "room", 501, { room_type_id: "RT02" });
@@ -53,7 +57,7 @@ describe("CRUD lifecycle per entity", () => {
     await deleteRow(db, ADMIN, "room_details", "RT09");
     const audit = await auditFor(db, "ROOM_DETAILS", "RT09");
     expect(audit.map((a) => a.action)).toEqual(["INSERT", "UPDATE", "DELETE"]); // varchar REC_ID now stored
-    expect(audit[1]).toMatchObject({ old_data: "ROOM_PRICE=4200.50; ROOM_VIEW=City View", new_data: "ROOM_PRICE=4500.00; ROOM_VIEW=Garden View" });
+    expect(audit[1]).toMatchObject({ old_data: "ROOM_VIEW=City View", new_data: "ROOM_VIEW=Garden View" });
   });
 
   it("LOYALTY_ACC (one per guest; points corrected only by the administrator)", async () => {
@@ -74,19 +78,20 @@ describe("CRUD lifecycle per entity", () => {
       { cus_id: "1002", discount_type: "NONE", stays: [{ room_no: "108", check_in_date: "2027-01-01", check_out_date: "2027-01-04" }], pay_method: "Card", pay_amt: "9000" },
       TODAY,
     );
-    expect(await getRow(db, FRONT_DESK, "payment", b.payId)).toMatchObject({ pay_amt: "9000.00", pts_earn: 180 });
+    expect(await getRow(db, FRONT_DESK, "payment", b.payId)).toMatchObject({ pay_amt: "9000.00", pts_earn: 90 });
 
     // Correction: move the stay to another free room, then delete the correction row's history in order.
     const rr = (await listRows(db, ADMIN, "reservation_room", { filter: { field: "res_id", value: String(b.resId) } }))[0];
     await updateRow(db, ADMIN, "reservation_room", rr.res_room_id as number, { room_no: "108", check_in_date: "2027-01-02", check_out_date: "2027-01-05" });
     expect((await getRow(db, ADMIN, "reservation_room", rr.res_room_id as number)).check_in_date).toBe("2027-01-02");
 
-    // Delete: children first (never cascades); deleting the payment takes back its points.
+    // Delete: children first (only the retention purge cascades). The booking's earned points
+    // were never credited (it is not Completed), so deleting the payment leaves the balance alone.
     const before = await points(db, 5002);
     await expect(deleteRow(db, ADMIN, "reservation", b.resId)).rejects.toMatchObject({ code: "dependency" });
     await deleteRow(db, ADMIN, "receipt", b.rctNo);
     await deleteRow(db, ADMIN, "payment", b.payId);
-    expect(await points(db, 5002)).toBe(before - 180);
+    expect(await points(db, 5002)).toBe(before);
     await deleteRow(db, ADMIN, "reservation_room", rr.res_room_id as number);
     await deleteRow(db, ADMIN, "reservation", b.resId);
 
@@ -106,8 +111,13 @@ describe("CRUD lifecycle per entity", () => {
     const can = await createRow(db, FRONT_DESK, "cancellation", { res_id: "1004", cancel_date: TODAY }, TODAY);
     expect((await getRow(db, FRONT_DESK, "reservation", 1004)).booking_status).toBe("Cancelled");
     await expect(createRow(db, FRONT_DESK, "cancellation", { res_id: "1001", cancel_date: TODAY }, TODAY)).rejects.toMatchObject({ code: "conflict" });
-    await expect(createRow(db, FRONT_DESK, "cancellation", { res_id: "1002", cancel_date: "2027-01-01" }, TODAY)).rejects.toMatchObject({ code: "conflict" });
+    await expect(createRow(db, FRONT_DESK, "cancellation", { res_id: "1003", cancel_date: TODAY }, TODAY)).rejects.toMatchObject({ code: "conflict" });
     expect((await updateRow(db, ADMIN, "cancellation", can.cancel_id as number, { cancel_date: "2026-10-31" })).cancel_date).toBe("2026-10-31");
+    // On time (check-in 2026-12-20), so the ₱3,000 paid was refunded; reinstating needs the refund removed first.
+    const refund = (await listRows(db, ADMIN, "refund", { filter: { field: "res_id", value: "1004" } }))[0];
+    expect(refund).toMatchObject({ refund_type: "Cancellation", refund_amt: "3000.00" });
+    await expect(deleteRow(db, ADMIN, "cancellation", can.cancel_id as number)).rejects.toMatchObject({ code: "conflict" });
+    await deleteRow(db, ADMIN, "refund", refund.refund_id as number);
     await deleteRow(db, ADMIN, "cancellation", can.cancel_id as number);
     expect((await getRow(db, FRONT_DESK, "reservation", 1004)).booking_status).toBe("Booked");
     expect((await auditFor(db, "RESERVATION", 1004)).map((a) => a.new_data)).toEqual(["BOOKING_STATUS=Cancelled", "BOOKING_STATUS=Booked"]);
@@ -133,7 +143,7 @@ describe("list pages: search, filter, sort, pagination", () => {
     expect(p.total).toBe(4);
     expect(p.rows.map((r) => r.res_id)).toEqual([1002, 1001]);
     const f = await pageRows(db, ADMIN, "reservation", { filters: { booking_status: "Completed" } });
-    expect(f.rows.map((r) => r.res_id)).toEqual([1001, 1002]);
+    expect(f.rows.map((r) => r.res_id)).toEqual([1001]);
     expect((await pageRows(db, ADMIN, "reservation", { q: "keizzy" })).rows.map((r) => r.res_id)).toEqual([1002]);
     await expect(pageRows(db, ADMIN, "reservation", { filters: { "1=1; --": "x" } })).rejects.toMatchObject({ code: "validation" });
     expect((await pageRows(db, ADMIN, "reservation", { sort: "res_id; DROP TABLE x" })).sort).toBe("res_id");

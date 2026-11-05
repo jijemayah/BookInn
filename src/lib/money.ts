@@ -16,8 +16,8 @@ export type Discount = (typeof DISCOUNTS)[number];
 /** Points needed for each discount (100 pts = 12% off, 250 pts = one free night). */
 export const DISCOUNT_POINTS: Record<Discount, number> = { NONE: 0, "12% Discount": 100, "Free Night": 250 };
 
-/** Points earned = total payment ÷ 50, decimals discarded (SRS §3.3). */
-export const pointsEarned = (amtCents: number) => Math.floor(amtCents / 5000);
+/** Points earned = total payment ÷ 100, decimals discarded (SRS v2 §3.3 Loyalty Accounts). */
+export const pointsEarned = (amtCents: number) => Math.floor(amtCents / 10000);
 
 /**
  * Amount due after the single allowed discount.
