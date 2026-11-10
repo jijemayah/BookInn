@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useState, useTransition } from "rea
 import { bookingAction, roomAvailabilityAction, type BookingState } from "@/app/actions";
 import { peso, toCents } from "@/lib/money";
 import { Icon } from "@/components/icons";
+import { GuestPicker } from "@/components/guest-picker";
 
 export interface Option {
   value: string;
@@ -49,7 +50,6 @@ export function BookingForm({
   const err = (k: string) => state.fieldErrors?.[k];
 
   // Client state survives Review → Edit and server errors.
-  const [guestFilter, setGuestFilter] = useState("");
   const [cusId, setCusId] = useState(defaults.cus_id ?? "");
   const [checkIn, setCheckIn] = useState(defaults.check_in_date ?? "");
   const [checkOut, setCheckOut] = useState(defaults.check_out_date ?? "");
@@ -81,9 +81,6 @@ export function BookingForm({
   const types = useMemo(() => ["All", ...new Set(rooms.map((r) => r.room_type))], [rooms]);
   const views = useMemo(() => ["All", ...new Set(rooms.map((r) => r.room_view))], [rooms]);
   const shown = rooms.filter((r) => (typeFilter === "All" || r.room_type === typeFilter) && (viewFilter === "All" || r.room_view === viewFilter));
-  const filteredGuests = guestFilter.trim()
-    ? customers.filter((c) => c.label.toLowerCase().includes(guestFilter.trim().toLowerCase()) || c.value === cusId)
-    : customers;
 
   const picked = Object.keys(picks).sort((a, b) => Number(a) - Number(b));
   const roomOf = (no: string) => rooms.find((r) => r.room_no === no);
@@ -120,21 +117,21 @@ export function BookingForm({
         <>
           <section className="card animate-in grid gap-4" aria-labelledby="guest-h">
             <h2 id="guest-h" className="flex items-center gap-2"><Icon name="guest" /> 1. Guest</h2>
-            <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr]">
-              <div className="grid gap-1">
-                <label htmlFor="guest_filter">Find a guest</label>
-                <input id="guest_filter" type="search" placeholder="Name or email" value={guestFilter} onChange={(e) => setGuestFilter(e.target.value)} autoComplete="off" />
-              </div>
-              <div className="grid gap-1">
-                <label htmlFor="cus_id">Guest <span aria-hidden="true" className="text-danger">*</span></label>
-                <select id="cus_id" name="cus_id" value={cusId} onChange={(e) => setCusId(e.target.value)} required aria-invalid={!!err("cus_id") || undefined} aria-describedby={err("cus_id") ? "cus_id_err" : undefined}>
-                  <option value="">{filteredGuests.length ? "— Select a guest —" : "No guest matches"}</option>
-                  {filteredGuests.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
-                <FieldError state={state} k="cus_id" />
-              </div>
+            <div className="grid gap-1 sm:max-w-xl">
+              <label htmlFor="guest">Guest <span aria-hidden="true" className="text-danger">*</span></label>
+              <GuestPicker
+                name="cus_id"
+                options={customers}
+                value={cusId}
+                onChange={setCusId}
+                invalid={!!err("cus_id")}
+                describedBy={err("cus_id") ? "cus_id_err" : "guest_help"}
+              />
+              <FieldError state={state} k="cus_id" />
+              <small id="guest_help" className="help">
+                Type part of the guest&rsquo;s name or email, then pick them from the list. Not listed? <Link href="/customer/new">Add a customer</Link>.
+              </small>
             </div>
-            <small className="help">Guest not listed? <Link href="/customer/new">Add a customer</Link>.</small>
           </section>
 
           <section className="card animate-in grid gap-4" aria-labelledby="stay-h" style={{ animationDelay: "60ms" }}>
