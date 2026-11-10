@@ -4,6 +4,7 @@
  * cancellation, following SRS v2 Table 2 (Front Desk and the Database
  * Administrator act; Finance reads). Every action is re-checked on the server.
  */
+import Link from "next/link";
 import type { ReservationView, StayRoom } from "@/lib/reservation-view";
 import { peso } from "@/lib/money";
 import { ENUMS } from "@/lib/entities";
@@ -33,16 +34,16 @@ function roomState(r: StayRoom) {
   return "Not checked in";
 }
 
-export function ReservationPanel({ v, rooms }: { v: ReservationView; rooms: RoomChoice[] }) {
+export function ReservationPanel({ v, rooms, roomNightsCents }: { v: ReservationView; rooms: RoomChoice[]; roomNightsCents: number }) {
   const id = String(v.resId);
   return (
     <>
-      <Section title="Stay">
+      <Section title={`Stay · reservation #${id}`}>
         <dl className="details mb-4">
           <dt>Status</dt>
           <dd><StatusBadge value={v.status} /></dd>
           <dt>Guest</dt>
-          <dd>{v.guest.cus_name} · {v.guest.cus_email}</dd>
+          <dd><Link href={`/customer/${v.guest.cus_id}`}>{v.guest.cus_name}</Link> · {v.guest.cus_email}</dd>
           {v.earliestCheckIn && (
             <>
               <dt>Earliest check-in</dt>
@@ -54,6 +55,8 @@ export function ReservationPanel({ v, rooms }: { v: ReservationView; rooms: Room
               </dd>
             </>
           )}
+          <dt>Room nights</dt>
+          <dd>{v.rooms.length} room{v.rooms.length === 1 ? "" : "s"} · {peso(roomNightsCents)} at room rates</dd>
           <dt>Paid upfront</dt>
           <dd>{peso(v.paidCents)}{v.pointsSpent > 0 && <span className="help"> · {v.pointsSpent} loyalty points spent</span>}</dd>
           <dt>Due at check-out</dt>

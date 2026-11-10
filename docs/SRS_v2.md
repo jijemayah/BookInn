@@ -2,10 +2,19 @@
 
 Prepared by Keizzy Dominique P. Alvarado, Jeremiah Joshua L. Esguerra, Jose Andre D.G. Evangelista and Jody Erich S. Medel.
 
-> Source: `BookInn_SRS_APA_Tables.pdf` (November 2026). This file transcribes **Sections 1 to 4**, which are the
-> source of truth for the implementation. Sections 5 onward (SQL Implementation, Interface Design, Testing and Results,
-> Conclusion, User Manual, Appendices) are intentionally empty in the SRS and are not reproduced. Figures 1 to 3 and
-> the ERD (Section 4.1) are images in the PDF; their content is covered by Table 1, Section 2.2 and Table 4.
+> Source: `BookInn_SRS_FINALNAFINAL.pdf` (November 2026, final revision; previously `BookInn_SRS_APA_Tables.pdf`). This
+> file transcribes **Sections 1 to 4**, which are the source of truth for the implementation. Section 5 (SQL
+> Implementation) consists of screenshots of the SQL in `db/migrations`. Section 6 (Interface Design), Section 7
+> (Testing and Results), Section 8, the User Manual and the Appendices are not reproduced; by the group's decision,
+> Section 6 is not used as the basis of the user interface. Figures 1 to 3 and the ERD (Section 4.1) are images in the
+> PDF; the relationships and delete rules of the earlier revision's Tables 4, 5 and 20 are kept below for reference
+> (the final revision no longer prints them, and their content is unchanged in Section 5).
+>
+> Changes in the final revision compared with the previous one: the **Payment Correction** rule (§3.3 Payments &
+> Receipts); FR-12 names the Database Administrator; No-Show notices are listed with the emails (§1.4); room type and
+> view names can be added "in the database" (Table 26); time zone written as PHT (UTC+8), the same as Asia/Manila;
+> the retention sentence reworded with the same meaning. Table numbers in the PDF changed (Tables 7–19 here are
+> Tables 5–17 there).
 > Where the SRS is silent or unclear, the implementation decisions are listed in `docs/SRS_AUDIT.md`; this file is
 > not edited to record them.
 
@@ -104,8 +113,8 @@ This project focuses on the development of a Hotel Reservation System and will o
   items.
 - The system shall permanently delete reservation records and all associated records, including reserved rooms,
   payments, receipts, charges, refunds, and cancellations, one (1) year after the reservation's latest check-out date.
-  These records shall not be archived or retained beyond the one-year retention period. A reservation with an unpaid
-  balance is reviewed by the Database Administrator and is not deleted until the balance is resolved.
+  These records shall not be archived. Reservations with outstanding Unpaid charges shall be excluded from the deletion
+  process until the Database Administrator resolves the balance.
 - The system shall retain guest profiles, loyalty accounts, and audit trail entries permanently, regardless of the
   deletion of their associated reservation records.
 
@@ -122,8 +131,8 @@ This project focuses on the development of a Hotel Reservation System and will o
 - The system will utilize PostgreSQL, hosted and managed through Supabase, as its database management system. Staff
   log in with a username and a password. The password is stored only as a hash in the STAFF table, and RBAC is
   enforced by the application on the server.
-- The application will be built with Next.js and deployed on Vercel. Receipts and refund confirmations will be sent by
-  email through Resend.
+- The application will be built with Next.js and deployed on Vercel. Receipts, refund confirmations, and no-show
+  notices will be sent by email through Resend.
 
 **Out of Scope**
 
@@ -237,7 +246,7 @@ accessible.
 ### 3.1 Functional Requirements
 
 BookInn shall provide the following functional modules and requirements for managing hotel reservations and related
-information. (In the PDF, highlighted text is open for group discussion.)
+information.
 
 **1. User Account Module**
 
@@ -264,8 +273,8 @@ information. (In the PDF, highlighted text is open for group discussion.)
 
 **4. Room Management Module**
 
-- **FR-12:** The system shall allow authorized users to add rooms and room types, and to update room details other than
-  the price.
+- **FR-12:** The system shall allow the Database Administrator to add rooms and room types, and to update room details
+  other than the fixed room price.
 - **FR-13:** The system shall display room availability, computed from the check-in and check-out dates and the
   check-in and check-out events of existing reservations, and room details.
 
@@ -396,7 +405,7 @@ These guidelines reflect standard hotel management practices and align with comm
 
 #### Dates and Times
 
-- All dates and times use Asia/Manila time. The standard check-in time is 14:00 and the standard check-out time is
+- All dates and times use (PHT, UTC+8) time. The standard check-in time is 14:00 and the standard check-out time is
   12:00.
 - The 48-hour cutoff is the earliest check-in date at 14:00 minus 48 hours. An action made exactly at the cutoff is
   still on time.
@@ -405,7 +414,7 @@ These guidelines reflect standard hotel management practices and align with comm
 
 #### Scheduled and Automatic Actions
 
-- **Daily job:** Every day at 00:05 Asia/Manila time the system runs one scheduled job that does three things in this
+- **Daily job:** Every day at 00:05 (PHT, UTC+8) time the system runs one scheduled job that does three things in this
   order. First, it sets to No-Show every Booked reservation whose latest check-out date is before today and that has no
   room checked in, then sends the No-Show notice email to the guest. Second, it sets to Completed every Checked-In
   reservation that has no room checked in, no room still expected, and no Unpaid charge, and credits the earned points.
@@ -506,6 +515,8 @@ Cancelled, and No-Show reservations cannot be changed except by Database Adminis
   transactions. The guest receives a refund confirmation by email.
 - **Payment Permissions:** The front desk will also be in charge of logging payment, charge, and refund records, while
   finance officers get viewing access to payment records, receipts, charges, and refunds.
+- **Payment Correction:** A wrongly recorded payment is corrected by the Database Administrator by editing the existing
+  record, not by adding another payment. The change is recorded in the audit trail.
 
 #### Loyalty Accounts and Pointing System
 
@@ -760,7 +771,7 @@ cascading, so a purge that removes a reservation's payments and rooms together d
 | ROOM_NO | int | FK | Room booked | References ROOM.ROOM_NO |
 | CHECK_IN_DATE | date | | Planned check-in date | |
 | CHECK_OUT_DATE | date | | Planned check-out date | Must be after check-in. Extended in place by an in-stay extension; shortened by an early departure |
-| ACTUAL_CHECK_IN | timestamp | | When the room was actually checked in | NULL until check-in; Asia/Manila time; not before CHECK_IN_DATE |
+| ACTUAL_CHECK_IN | timestamp | | When the room was actually checked in | NULL until check-in; (PHT, UTC+8) time; not before CHECK_IN_DATE |
 | ACTUAL_CHECK_OUT | timestamp | | When the room was actually checked out | NULL until check-out; must be after ACTUAL_CHECK_IN |
 
 **Table 25. Room**
@@ -775,9 +786,9 @@ cascading, so a purge that removes a reservation's payments and rooms together d
 | Column | Data type | Key | Description | Notes |
 |---|---|---|---|---|
 | ROOM_TYPE_ID | varchar(4) | PK | Short code for the room type | |
-| ROOM_TYPE | enum | | Name of the room type | Allowed values: Standard, Deluxe; the Database Administrator can add more room types and views |
+| ROOM_TYPE | enum | | Name of the room type | Allowed values: Standard, Deluxe; the Database Administrator can add more room type names in the database |
 | ROOM_PRICE | decimal | | Price of the room type | Precision (8,2) per night; cannot be negative. Fixed: set when the room type is created and never edited. A rate change means creating a new room type |
-| ROOM_VIEW | enum | | View of the room type | Allowed values: Ocean View, City View, Garden View, Pool View |
+| ROOM_VIEW | enum | | View of the room type | Allowed values: Ocean View, City View, Garden View, Pool View; the Database Administrator can add more room view names in the database |
 
 **Table 27. Payment**
 

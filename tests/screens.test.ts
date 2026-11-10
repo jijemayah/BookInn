@@ -7,12 +7,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "@/lib/db/types";
 import { createBooking, quoteBooking } from "@/lib/booking";
-import { createRow, updateRow } from "@/lib/crud";
+import { createRow, getRow, pageRows, refOptions, updateRow } from "@/lib/crud";
 import { checkInRoom, checkOutRoom } from "@/lib/stay";
 import { reservationView } from "@/lib/reservation-view";
 import { addRoomOption, enumValues } from "@/lib/room-options";
 import { buildFormFields } from "@/lib/form-fields";
-import { dashboardStats, roomAvailability } from "@/lib/dashboard";
+import { dashboardStats, dashboardTrends, roomAvailability } from "@/lib/dashboard";
 import { ENTITIES } from "@/lib/entities";
 import { atHotelTime } from "@/lib/dates";
 import { ADMIN, FINANCE, FRONT_DESK, freshDb } from "./helpers";
@@ -74,6 +74,44 @@ describe("room types and views (Table 26)", () => {
     expect(fields.find((f) => f.name === "room_price")).toMatchObject({ readOnly: true, value: "1500.00" });
     const r = await updateRow(db, ADMIN, "room_details", "RT01", { room_type: "Standard", room_price: "1", room_view: "Ocean View" });
     expect(r.room_price).toBe("1500.00");
+  });
+});
+
+describe("lists show short names and the reservation's rooms and stay (no repeated guest email)", () => {
+  it("reservation rows carry the guest's name only, plus Rooms and Stay columns", async () => {
+    const r = await getRow(db, ADMIN, "reservation", 1001);
+    expect(r).toMatchObject({ cus_id__label: "JUAN DELA CRUZ", rooms: "205, 206", stay: "2026-06-25 → 2026-06-28" });
+    const page = await pageRows(db, FINANCE, "reservation", { limit: 50 });
+    expect(page.rows.every((x) => !String(x.cus_id__label).includes("@"))).toBe(true);
+    // Search still matches the guest's email through the full label.
+    expect((await pageRows(db, ADMIN, "reservation", { q: "kdpalvarado@gmail.com" })).rows.map((x) => x.res_id)).toContain(1002);
+    // Computed columns cannot be used to filter or sort.
+    await expect(pageRows(db, ADMIN, "reservation", { filters: { rooms: "205" } })).rejects.toMatchObject({ code: "validation" });
+    expect((await pageRows(db, ADMIN, "reservation", { sort: "stay" })).sort).toBe("res_id");
+  });
+
+  it("dropdowns keep the full label so guests with the same name can be told apart", async () => {
+    const opts = await refOptions(db, FRONT_DESK, "customer");
+    expect(opts.find((o) => o.value === "1001")?.label).toBe("JUAN DELA CRUZ <jdcruz@gmail.com>");
+  });
+});
+
+describe("dashboard trends", () => {
+  it("counts bookings (Initial payments), payments and cancellations per day for the last 7 days", async () => {
+    const t = await dashboardTrends(db, FINANCE, "2026-10-21");
+    expect(t.days.map((d) => d.date)).toEqual(["2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21"]);
+    expect(t.days.find((d) => d.date === "2026-10-20")).toMatchObject({ bookings: 1, paymentsCents: 300_000, cancellations: 0 }); // demo payment 1005
+    expect(t).toMatchObject({ bookings7: 1, payments7Cents: 300_000 });
+    const sep = await dashboardTrends(db, FINANCE, "2026-09-15");
+    expect(sep.days.at(-1)).toMatchObject({ date: "2026-09-15", cancellations: 1 }); // cancellation 9001
+    expect(sep.days.find((d) => d.date === "2026-09-11")).toMatchObject({ bookings: 1, paymentsCents: 600_000 }); // payment 1003
+  });
+
+  it("counts today's arrivals and departures from the reserved rooms and their check-in/out events", async () => {
+    const t = await dashboardTrends(db, FINANCE, "2026-06-25");
+    expect(t).toMatchObject({ arrivalsToday: 2, arrivalsCheckedIn: 2 }); // 1001: rooms 205 and 206
+    const out = await dashboardTrends(db, FINANCE, "2026-06-27");
+    expect(out).toMatchObject({ departuresToday: 1, departuresCheckedOut: 1 }); // room 206
   });
 });
 

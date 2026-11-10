@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 export function PageHeader({ title, description, actions, back }: { title: string; description?: ReactNode; actions?: ReactNode; back?: { href: string; label: string } }) {
   return (
-    <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <header className="animate-in mb-6 flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0 max-w-3xl">
         {back && (
           <Link href={back.href} className="mb-2 inline-block text-sm">
@@ -80,7 +80,7 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 export function Section({ title, children, actions, id }: { title: string; children: ReactNode; actions?: ReactNode; id?: string }) {
   const hid = id ?? `s-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
-    <section className="card mb-6" aria-labelledby={hid}>
+    <section className="card animate-in mb-6" aria-labelledby={hid}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 id={hid}>{title}</h2>
         {actions}

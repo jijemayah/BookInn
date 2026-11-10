@@ -21,21 +21,26 @@ export function assertCan(actor: Actor, e: EntityDef, op: Op) {
   }
 }
 
+/** Real table columns: password hashes are never selected; computed list columns are not columns. */
+const tableFields = (e: EntityDef) => e.fields.filter((f) => !f.virtualSql);
+
 /** Selectable columns — password hashes are never selected. */
 function columns(e: EntityDef) {
-  const cols = [e.pk, ...e.fields.filter((f) => f.type !== "password").map((f) => f.name)];
+  const cols = [e.pk, ...tableFields(e).filter((f) => f.type !== "password").map((f) => f.name)];
   return [...new Set(cols)];
 }
 
 function selectSql(e: EntityDef) {
   const cols = columns(e).map((c) => `m.${q(c)}`);
+  // Cells show the short label (e.g. only the guest's name); dropdowns and search use the full one.
   const labels = e.fields
     .filter((f) => f.type === "ref")
     .map((f) => {
       const r = ENTITIES[f.ref!];
-      return `(SELECT ${r.labelSql} FROM ${r.table} t WHERE t.${q(r.pk)} = m.${q(f.name)}) AS ${q(f.name + "__label")}`;
+      return `(SELECT ${r.shortLabelSql ?? r.labelSql} FROM ${r.table} t WHERE t.${q(r.pk)} = m.${q(f.name)}) AS ${q(f.name + "__label")}`;
     });
-  return `SELECT ${[...cols, ...labels].join(", ")} FROM ${e.table} m`;
+  const virtual = e.fields.filter((f) => f.virtualSql).map((f) => `(${f.virtualSql}) AS ${q(f.name)}`);
+  return `SELECT ${[...cols, ...labels, ...virtual].join(", ")} FROM ${e.table} m`;
 }
 
 // ---------------------------------------------------------------- reads
@@ -57,7 +62,7 @@ export async function pageRows(db: Db, actor: Actor, key: EntityKey, opts: ListO
   for (const [field, value] of Object.entries(opts.filters ?? {})) {
     if (value === "") continue;
     // Only columns declared on the entity may be filtered on.
-    if (field !== e.pk && !e.fields.some((f) => f.name === field)) throw new AppError("validation", "Unknown filter.");
+    if (field !== e.pk && !tableFields(e).some((f) => f.name === field)) throw new AppError("validation", "Unknown filter.");
     params.push(value);
     where.push(`m.${q(field)}::text = $${params.length}`);
   }
@@ -65,7 +70,7 @@ export async function pageRows(db: Db, actor: Actor, key: EntityKey, opts: ListO
   if (term) {
     params.push(term);
     const n = params.length;
-    const searchable = e.fields.filter((f) => ["text", "email", "enum", "date", "ref", "int", "money"].includes(f.type));
+    const searchable = tableFields(e).filter((f) => ["text", "email", "enum", "date", "ref", "int", "money"].includes(f.type));
     const parts = [`m.${q(e.pk)}::text = $${n}`, ...searchable.map((f) => `m.${q(f.name)}::text ILIKE '%' || $${n} || '%'`)];
     // Search the human label of referenced rows too (e.g. a customer's name on a reservation).
     for (const f of e.fields.filter((x) => x.type === "ref")) {
@@ -79,7 +84,7 @@ export async function pageRows(db: Db, actor: Actor, key: EntityKey, opts: ListO
     (await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${e.table} m${whereSql}`, params)).rows[0].n,
   );
 
-  const sortable = [e.pk, ...e.fields.filter((f) => f.type !== "password").map((f) => f.name)];
+  const sortable = [e.pk, ...tableFields(e).filter((f) => f.type !== "password").map((f) => f.name)];
   const sort = opts.sort && sortable.includes(opts.sort) ? opts.sort : e.pk;
   const dir = opts.dir ?? (e.key === "audit_trail" ? "desc" : "asc");
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 500);

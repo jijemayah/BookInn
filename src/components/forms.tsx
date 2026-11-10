@@ -103,7 +103,7 @@ export function EntityForm({ action, fields, submitLabel }: { action: Action; fi
       })}
       <div>
         <button type="submit" className="btn btn-primary" disabled={pending}>
-          {pending ? "Saving…" : submitLabel}
+          {pending ? <><span className="spinner" aria-hidden="true" /> {"Saving…"}</> : submitLabel}
         </button>
       </div>
     </form>
@@ -143,7 +143,7 @@ export function ConfirmButton({
         </p>
       )}
       <button type="submit" className={`btn btn-${variant}`} disabled={pending}>
-        {pending ? pendingLabel : label}
+        {pending ? <><span className="spinner" aria-hidden="true" /> {pendingLabel}</> : label}
       </button>
     </form>
   );
@@ -192,7 +192,7 @@ export function ActionForm({
       <div className={className}>
         {children}
         <button type="submit" className={`btn btn-${variant}`} disabled={pending}>
-          {pending ? pendingLabel : submitLabel}
+          {pending ? <><span className="spinner" aria-hidden="true" /> {pendingLabel}</> : submitLabel}
         </button>
       </div>
     </form>
@@ -233,7 +233,7 @@ export function PasswordForm({ action }: { action: Action }) {
       <SimpleField name="new_password" label="New password" type="password" autoComplete="new-password" state={state} />
       <SimpleField name="confirm_password" label="Confirm new password" type="password" autoComplete="new-password" state={state} />
       <div>
-        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? "Saving…" : "Change password"}</button>
+        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? <><span className="spinner" aria-hidden="true" /> {"Saving…"}</> : "Change password"}</button>
       </div>
     </form>
   );
@@ -246,7 +246,7 @@ export function NameForm({ action, name }: { action: Action; name: string }) {
       <FormMessages state={state} />
       <SimpleField name="name" label="Full name" autoComplete="name" state={state} defaultValue={state.values?.name ?? name} />
       <div>
-        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? "Saving…" : "Save name"}</button>
+        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? <><span className="spinner" aria-hidden="true" /> {"Saving…"}</> : "Save name"}</button>
       </div>
     </form>
   );

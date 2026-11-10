@@ -124,3 +124,101 @@ export async function dashboardStats(db: Db, actor: Actor, today = hotelToday())
     nextArrivals: arrivals.rows,
   };
 }
+
+// ---------------------------------------------------------------- trends (dashboard charts)
+export interface DayPoint {
+  date: string;
+  /** Sum of payments recorded that day (Initial and Checkout). */
+  paymentsCents: number;
+  /** Bookings made that day (counted by their Initial payment). */
+  bookings: number;
+  /** Guest cancellations that day. */
+  cancellations: number;
+}
+
+export interface DashboardTrends {
+  days: DayPoint[];
+  bookings7: number;
+  bookingsPrev7: number;
+  payments7Cents: number;
+  paymentsPrev7Cents: number;
+  revenueLastMonthCents: number;
+  arrivalsToday: number;
+  arrivalsCheckedIn: number;
+  departuresToday: number;
+  departuresCheckedOut: number;
+  /** Rooms checked in and not yet checked out right now. */
+  occupiedNow: number;
+}
+
+/**
+ * Last-7-days series and today's arrivals/departures for the dashboard. Everything is
+ * computed from existing records (payments, cancellations, reserved rooms and their
+ * check-in/out events); nothing new is stored.
+ */
+export async function dashboardTrends(db: Db, actor: Actor, today = hotelToday()): Promise<DashboardTrends> {
+  assertCan(actor, ENTITIES.reservation, "read");
+  const from = addDays(today, -6);
+  const prevFrom = addDays(today, -13);
+  const prevTo = addDays(today, -7);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const lastMonthStart = `${addDays(monthStart, -1).slice(0, 7)}-01`;
+
+  const [pay, can, prev, lastMonth, arr, dep, occ] = await Promise.all([
+    db.query<{ d: string; total: string; bookings: number }>(
+      `SELECT pay_date::text AS d, sum(pay_amt)::text AS total, count(*) FILTER (WHERE pay_type = 'Initial')::int AS bookings
+         FROM bookinn.payment WHERE pay_date BETWEEN $1::date AND $2::date GROUP BY 1`,
+      [from, today],
+    ),
+    db.query<{ d: string; n: number }>(
+      "SELECT cancel_date::text AS d, count(*)::int AS n FROM bookinn.cancellation WHERE cancel_date BETWEEN $1::date AND $2::date GROUP BY 1",
+      [from, today],
+    ),
+    db.query<{ total: string; bookings: number }>(
+      `SELECT COALESCE(sum(pay_amt), 0)::text AS total, count(*) FILTER (WHERE pay_type = 'Initial')::int AS bookings
+         FROM bookinn.payment WHERE pay_date BETWEEN $1::date AND $2::date`,
+      [prevFrom, prevTo],
+    ),
+    db.query<{ total: string }>(
+      "SELECT COALESCE(sum(pay_amt), 0)::text AS total FROM bookinn.payment WHERE pay_date >= $1::date AND pay_date < $2::date",
+      [lastMonthStart, monthStart],
+    ),
+    db.query<{ total: number; done: number }>(
+      `SELECT count(*)::int AS total, count(*) FILTER (WHERE rr.actual_check_in IS NOT NULL)::int AS done
+         FROM bookinn.reservation_room rr JOIN bookinn.reservation r ON r.res_id = rr.res_id
+        WHERE rr.check_in_date = $1::date AND r.booking_status IN ('Booked', 'Checked-In', 'Completed')`,
+      [today],
+    ),
+    db.query<{ total: number; done: number }>(
+      `SELECT count(*)::int AS total, count(*) FILTER (WHERE rr.actual_check_out IS NOT NULL)::int AS done
+         FROM bookinn.reservation_room rr JOIN bookinn.reservation r ON r.res_id = rr.res_id
+        WHERE rr.check_out_date = $1::date AND rr.actual_check_in IS NOT NULL AND r.booking_status IN ('Checked-In', 'Completed')`,
+      [today],
+    ),
+    db.query<{ n: number }>(
+      `SELECT count(DISTINCT rr.room_no)::int AS n FROM bookinn.reservation_room rr JOIN bookinn.reservation r ON r.res_id = rr.res_id
+        WHERE r.booking_status = 'Checked-In' AND rr.actual_check_in IS NOT NULL AND rr.actual_check_out IS NULL`,
+    ),
+  ]);
+
+  const payBy = new Map(pay.rows.map((r) => [r.d, r]));
+  const canBy = new Map(can.rows.map((r) => [r.d, Number(r.n)]));
+  const days: DayPoint[] = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(from, i);
+    const p = payBy.get(date);
+    return { date, paymentsCents: p ? toCents(p.total) : 0, bookings: p ? Number(p.bookings) : 0, cancellations: canBy.get(date) ?? 0 };
+  });
+  return {
+    days,
+    bookings7: days.reduce((a, d) => a + d.bookings, 0),
+    bookingsPrev7: Number(prev.rows[0].bookings),
+    payments7Cents: days.reduce((a, d) => a + d.paymentsCents, 0),
+    paymentsPrev7Cents: toCents(prev.rows[0].total),
+    revenueLastMonthCents: toCents(lastMonth.rows[0].total),
+    arrivalsToday: Number(arr.rows[0].total),
+    arrivalsCheckedIn: Number(arr.rows[0].done),
+    departuresToday: Number(dep.rows[0].total),
+    departuresCheckedOut: Number(dep.rows[0].done),
+    occupiedNow: Number(occ.rows[0].n),
+  };
+}

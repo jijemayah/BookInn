@@ -52,15 +52,95 @@
 }
 
 @layer components {
+  /* Buttons lift slightly on hover and press down on click. */
   .btn {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent px-4 py-2 text-sm font-medium no-underline transition-colors
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent px-4 py-2 text-sm font-medium no-underline
            disabled:cursor-not-allowed disabled:opacity-60 hover:no-underline;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
   }
+  .btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 12px -4px rgb(0 67 24 / 0.35); }
+  .btn:not(:disabled):active { transform: translateY(0) scale(0.97); box-shadow: none; }
   .btn-primary { @apply bg-brand-800 text-white hover:bg-brand-900; }
   .btn-secondary { @apply border-brand-300 bg-white text-brand-800 hover:bg-brand-100; }
   .btn-danger { @apply bg-danger text-white hover:bg-[#8f1c13]; }
   .btn-ghost { @apply text-brand-800 hover:bg-brand-100; }
+  .btn-link { @apply cursor-pointer border-0 bg-transparent p-0 text-xs font-medium text-brand-800 underline-offset-2 hover:underline; }
   .card { @apply rounded-xl border border-line bg-white p-5 shadow-sm; }
+
+  /* Small spinning ring shown inside a button while its action runs. */
+  .spinner {
+    @apply inline-block h-4 w-4 rounded-full border-2 border-current border-r-transparent;
+    animation: spin 700ms linear infinite;
+  }
+
+  /* Filter chips (room type / view). */
+  .chip {
+    @apply cursor-pointer rounded-full border border-line bg-white px-3 py-1 text-xs font-medium text-ink;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms ease;
+  }
+  .chip:hover { @apply border-brand-400 bg-brand-100; }
+  .chip:active { transform: scale(0.95); }
+  .chip-on { @apply border-brand-800 bg-brand-800 text-white hover:border-brand-900 hover:bg-brand-900; }
+
+  /* Selectable room tiles on the booking form. */
+  .room-tile {
+    @apply cursor-pointer rounded-lg border border-line bg-white p-3 text-left;
+    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 120ms ease;
+  }
+  .room-tile:not(:disabled):hover { @apply border-brand-400; transform: translateY(-2px); box-shadow: 0 6px 16px -8px rgb(0 67 24 / 0.35); }
+  .room-tile:not(:disabled):active { transform: scale(0.98); }
+  .room-tile-on { @apply border-brand-800 bg-brand-100 ring-2 ring-brand-200; }
+  .room-tile-taken { @apply cursor-not-allowed bg-[#f4f6f4] opacity-60; }
+  .room-check { @apply inline-flex h-5 w-5 items-center justify-center rounded-full border border-line text-transparent; transition: all 150ms ease; }
+  .room-check-on { @apply border-brand-800 bg-brand-800 text-white; animation: pop 220ms ease; }
+
+  /* Card-style radio options (discount, payment method). */
+  .option-card {
+    @apply cursor-pointer rounded-lg border border-line bg-white px-3 py-2.5;
+    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 120ms ease;
+  }
+  .option-card:hover { @apply border-brand-400; }
+  .option-card:active { transform: scale(0.98); }
+  .option-card:has(input:checked) { @apply border-brand-800 bg-brand-100 ring-2 ring-brand-200; }
+  .option-card:has(input:focus-visible) { @apply outline-2 outline-offset-2 outline-brand-600; }
+
+  /* Sidebar links: the icon nudges right on hover. */
+  .nav-link { transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease; }
+  .nav-link svg { transition: transform 160ms ease, color 160ms ease; }
+  .nav-link:hover svg { transform: translateX(2px); }
+
+  /* Entrance: fade and rise. Stagger with an inline animation-delay. */
+  .animate-in { animation: rise-in 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+  /* Dashboard visuals. */
+  .stat-card {
+    @apply relative overflow-hidden rounded-xl border border-line bg-white p-4 text-ink no-underline shadow-sm;
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+  a.stat-card:hover { @apply border-brand-400 no-underline; transform: translateY(-2px); box-shadow: 0 10px 24px -14px rgb(0 67 24 / 0.45); }
+  .stat-card-accent { @apply border-brand-800 bg-brand-800 text-white; }
+  .stat-icon { @apply inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-brand-800; }
+  .stat-card-accent .stat-icon { @apply bg-white/15 text-white; }
+  .wipe { animation: wipe-in 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both; transform-origin: left center; }
+  .grow-up { animation: grow-up 800ms cubic-bezier(0.2, 0.7, 0.2, 1) both; transform-origin: bottom center; transform-box: fill-box; }
+  .draw-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1200ms ease-out 150ms forwards; }
+  .fade-area { animation: fade-in 700ms ease 700ms both; }
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pop { 0% { transform: scale(0.6); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes wipe-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes grow-up { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; }
+  .draw-line { stroke-dashoffset: 0; }
+}
+
+@layer components {
   .badge { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium; }
   .help { @apply text-xs text-muted; }
   .field-error { @apply text-xs font-medium text-danger; }

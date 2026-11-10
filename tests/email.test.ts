@@ -95,11 +95,13 @@ describe("receipts: one per payment, to the guest", () => {
     expect(sent()[0].text).toContain("check-out payment");
   });
 
-  it("emails a receipt for a payment the administrator records on the generic form", async () => {
+  it("sends no receipt for a payment the administrator tries to add on the generic form (Payment Correction rule)", async () => {
     const r = await db.query<{ res_id: number }>("INSERT INTO bookinn.reservation (cus_id) VALUES (1002) RETURNING res_id");
     await db.query("INSERT INTO bookinn.reservation_room (res_id, room_no, check_in_date, check_out_date) VALUES ($1, 108, '2027-03-01', '2027-03-02')", [r.rows[0].res_id]);
-    const p = await createRow(db, ADMIN, "payment", { res_id: String(r.rows[0].res_id), pay_type: "Initial", pay_method: "Bank", pay_date: TODAY, pay_amt: "3000", discount_type: "NONE" });
-    expect(sent()).toEqual([expect.objectContaining({ idempotencyKey: `bookinn-receipt-${p.pay_id}` })]);
+    await expect(
+      createRow(db, ADMIN, "payment", { res_id: String(r.rows[0].res_id), pay_type: "Initial", pay_method: "Bank", pay_date: TODAY, pay_amt: "3000", discount_type: "NONE" }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(send).not.toHaveBeenCalled();
   });
 });
 

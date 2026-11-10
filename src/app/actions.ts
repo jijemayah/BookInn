@@ -8,6 +8,8 @@ import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db/pg";
 import { createRow, deleteRow, updateRow } from "@/lib/crud";
 import { cancelReservation, createBooking, quoteBooking, type BookingInput, type Quote } from "@/lib/booking";
+import { roomAvailability } from "@/lib/dashboard";
+import { isRealDate } from "@/lib/validation";
 import { runMaintenance, type MaintenanceResult } from "@/lib/maintenance";
 import { modifyReservation, type ModifyStayInput } from "@/lib/modify";
 import { checkInRoom, checkOutRoom, extendStay, settleCheckout } from "@/lib/stay";
@@ -161,6 +163,21 @@ function bookingInput(fd: FormData): { input: BookingInput; values: Record<strin
 }
 
 /** One form, two steps: "review" prices the booking; "confirm" saves it with the payment. */
+/**
+ * Booking form helper: which rooms are free for [from, to) (FR-13, FR-16). Read-only; the
+ * booking itself re-checks availability on the server. Returns the taken room numbers.
+ */
+export async function roomAvailabilityAction(from: string, to: string): Promise<{ taken: number[]; error?: string }> {
+  const a = await actor();
+  if (!isRealDate(from) || !isRealDate(to) || to <= from) return { taken: [], error: "Choose a check-out date after the check-in date." };
+  try {
+    const rows = await roomAvailability(getDb(), a, from, to);
+    return { taken: rows.filter((r) => !r.available).map((r) => r.room_no) };
+  } catch (err) {
+    return { taken: [], error: isAppError(err) ? err.message : "Could not check availability." };
+  }
+}
+
 export async function bookingAction(_prev: BookingState, fd: FormData): Promise<BookingState> {
   const a = await actor();
   const { input, values, rooms } = bookingInput(fd);
