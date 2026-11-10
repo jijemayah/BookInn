@@ -1,5 +1,6 @@
 "use client";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { GuestPicker } from "./guest-picker";
 import type { FormState } from "@/app/actions";
 
 export interface FormField {
@@ -15,6 +16,24 @@ export interface FormField {
   /** Shown but not submitted (immutable on edit). */
   readOnly?: boolean;
   value?: string;
+  /** Pick from a searchable list instead of a dropdown (customers: type a name or email). */
+  search?: boolean;
+}
+
+/** Generic-form wrapper around the Guest search box (keeps the chosen value in local state). */
+function SearchField({ f, id, initial, invalid, describedBy }: { f: FormField; id: string; initial: string; invalid?: boolean; describedBy?: string }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <GuestPicker
+      name={f.name}
+      inputId={id}
+      options={f.options ?? []}
+      value={value}
+      onChange={setValue}
+      invalid={invalid}
+      describedBy={describedBy}
+    />
+  );
 }
 
 type Action = (prev: FormState, fd: FormData) => Promise<FormState>;
@@ -52,6 +71,8 @@ export function EntityForm({ action, fields, submitLabel }: { action: Action; fi
               {f.options?.find((o) => o.value === f.value)?.label ?? f.value}
             </output>
           );
+        } else if (f.search) {
+          control = <SearchField key={key} f={f} id={id} initial={val(f)} invalid={!!err} describedBy={describedBy} />;
         } else if (f.type === "enum" || f.type === "ref") {
           control = (
             <select key={key} {...common} defaultValue={val(f)}>

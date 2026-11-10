@@ -90,6 +90,18 @@ describe("lists show short names and the reservation's rooms and stay (no repeat
     expect((await pageRows(db, ADMIN, "reservation", { sort: "stay" })).sort).toBe("res_id");
   });
 
+  it("every customer field is a type-to-search box (opening a loyalty account, reservation corrections)", async () => {
+    const loyalty = await buildFormFields(db, FRONT_DESK, ENTITIES.loyalty_acc, "create");
+    expect(loyalty.find((f) => f.name === "cus_id")).toMatchObject({ search: true, options: expect.arrayContaining([{ value: "1001", label: "JUAN DELA CRUZ <jdcruz@gmail.com>" }]) });
+    const correction = await buildFormFields(db, ADMIN, ENTITIES.reservation, "update", { res_id: 1001, cus_id: 1001, booking_status: "Completed" });
+    expect(correction.find((f) => f.name === "cus_id")).toMatchObject({ search: true, value: "1001" });
+    // A customer field that cannot be changed is shown as plain text, not a search box.
+    const lylEdit = await buildFormFields(db, ADMIN, ENTITIES.loyalty_acc, "update", { lyl_id: 5001, cus_id: 1001, total_pts: 75 });
+    expect(lylEdit.find((f) => f.name === "cus_id")).toMatchObject({ readOnly: true, search: false });
+    // Other references stay dropdowns.
+    expect((await buildFormFields(db, ADMIN, ENTITIES.room, "create")).find((f) => f.name === "room_type_id")?.search).toBe(false);
+  });
+
   it("dropdowns keep the full label so guests with the same name can be told apart", async () => {
     const opts = await refOptions(db, FRONT_DESK, "customer");
     expect(opts.find((o) => o.value === "1001")?.label).toBe("JUAN DELA CRUZ <jdcruz@gmail.com>");

@@ -27,6 +27,7 @@ export function GuestPicker({
   onChange,
   invalid,
   describedBy,
+  inputId = "guest",
 }: {
   name: string;
   options: GuestOption[];
@@ -34,6 +35,8 @@ export function GuestPicker({
   onChange: (value: string) => void;
   invalid?: boolean;
   describedBy?: string;
+  /** id of the text box, for the field's <label htmlFor>. */
+  inputId?: string;
 }) {
   const id = useId();
   const listId = `${id}-list`;
@@ -62,7 +65,7 @@ export function GuestPicker({
       <input type="hidden" name={name} value={value} />
       <input
         ref={inputRef}
-        id="guest"
+        id={inputId}
         type="text"
         role="combobox"
         aria-expanded={showList}
