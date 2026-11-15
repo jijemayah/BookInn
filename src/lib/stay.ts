@@ -33,6 +33,7 @@ import {
   unpaidCharges,
 } from "./rules";
 import { addDays, hotelNow, hotelToday, nightsBetween } from "./dates";
+import { trustedNow } from "./clock";
 import { peso, pointsEarned, toCents } from "./money";
 import { isMoney, isRealDate } from "./validation";
 import { sendFor, type EmailOutcome } from "./email";
@@ -89,7 +90,7 @@ async function roomsCheckedIn(t: Db, resId: unknown) {
 }
 
 // ---------------------------------------------------------------- check-in
-export async function checkInRoom(db: Db, actor: Actor, resRoomId: string | number, now: Date = new Date()) {
+export async function checkInRoom(db: Db, actor: Actor, resRoomId: string | number, now: Date = trustedNow()) {
   assertFrontDesk(actor, "check guests in");
   return inTx(db, actor, now, async (t, today, nowLocal) => {
     const room = await lockRoomRow(t, resRoomId);
@@ -131,7 +132,7 @@ export async function extendStay(
   resRoomId: string | number,
   newCheckOut: string,
   opts: { roomNo?: string | number } = {},
-  now: Date = new Date(),
+  now: Date = trustedNow(),
 ): Promise<ExtensionResult> {
   assertFrontDesk(actor, "extend stays");
   if (!isRealDate(newCheckOut)) throw new AppError("validation", "Enter a valid new check-out date.", { check_out_date: "Invalid date." });
@@ -190,7 +191,7 @@ export interface CheckOutResult {
   completed: boolean;
 }
 
-export async function checkOutRoom(db: Db, actor: Actor, resRoomId: string | number, now: Date = new Date()): Promise<CheckOutResult> {
+export async function checkOutRoom(db: Db, actor: Actor, resRoomId: string | number, now: Date = trustedNow()): Promise<CheckOutResult> {
   assertFrontDesk(actor, "check guests out");
   return inTx(db, actor, now, async (t, today, nowLocal) => {
     const room = await lockRoomRow(t, resRoomId);
@@ -282,7 +283,7 @@ export async function settleCheckout(
   actor: Actor,
   resId: string | number,
   input: SettlementInput = {},
-  now: Date = new Date(),
+  now: Date = trustedNow(),
 ): Promise<SettlementResult> {
   assertFrontDesk(actor, "record check-out payments");
   const r = await inTx(db, actor, now, async (t, today) => {

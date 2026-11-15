@@ -3,6 +3,7 @@ import { DBA, ENTITIES, FIN, can, type EntityKey } from "@/lib/entities";
 import { logoutAction } from "@/app/actions";
 import { MobileMenu, NavLinks, type NavItem } from "@/components/nav";
 import { Icon, type IconName } from "@/components/icons";
+import { ClockWarningBanner } from "@/components/clock-warning";
 
 const ICONS: Partial<Record<EntityKey, IconName>> = {
   reservation: "bookings",
@@ -86,6 +87,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         </nav>
       </div>
       <main id="content" className="mx-auto w-full max-w-7xl px-4 py-6 md:px-8 md:py-8">
+        {/* Shown on every page when this computer's clock is wrong (all processes use the corrected time). */}
+        <ClockWarningBanner />
         {children}
       </main>
     </div>
