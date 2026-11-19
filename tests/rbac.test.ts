@@ -114,6 +114,35 @@ describe("18. authentication and deactivation", () => {
     expect(audit.rows.at(-1)).toMatchObject({ staff_id: 1002, new_data: "NAME=Jody E. Medel" });
   });
 
+  it("Forgot Password (SRS 3.3): only the Database Administrator sets a new password; nobody can see the old one", async () => {
+    // Front Desk and Finance cannot reset anyone's password (no access to Staff).
+    await expect(updateRow(db, FRONT_DESK, "staff", 1001, { u_name: "KDPALVARADO", name: "Keizzy", role: "Front Desk", pass: "Hacked#Pass1", is_active: "Yes" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(updateRow(db, FINANCE, "staff", 1001, { u_name: "KDPALVARADO", name: "Keizzy", role: "Front Desk", pass: "Hacked#Pass1", is_active: "Yes" })).rejects.toMatchObject({ code: "forbidden" });
+    expect(await verifyCredentials(db, "KDPALVARADO", PASSWORDS.frontDesk)).not.toBeNull(); // unchanged
+
+    // The administrator sets a new password for the staff member who forgot theirs.
+    await updateRow(db, ADMIN, "staff", 1001, { u_name: "KDPALVARADO", name: "Keizzy Dominique Alvarado", role: "Front Desk", pass: "Fresh#Pass2026", is_active: "Yes" });
+    expect(await verifyCredentials(db, "KDPALVARADO", "Fresh#Pass2026")).toMatchObject({ staffId: 1001 });
+    expect(await verifyCredentials(db, "KDPALVARADO", PASSWORDS.frontDesk)).toBeNull(); // the old password stops working
+
+    // Only a salted bcrypt hash is stored, a weak new password is refused, and the change is audited without any hash.
+    const stored = (await db.query<{ pass: string }>("SELECT pass FROM bookinn.staff WHERE staff_id = 1001")).rows[0].pass;
+    expect(stored).toMatch(/^\$2[aby]\$/);
+    expect(stored).not.toContain("Fresh#Pass2026");
+    await expect(updateRow(db, ADMIN, "staff", 1001, { u_name: "KDPALVARADO", name: "Keizzy", role: "Front Desk", pass: "password", is_active: "Yes" })).rejects.toMatchObject({
+      fieldErrors: { pass: expect.stringContaining("uppercase") },
+    });
+    const audit = await db.query<{ staff_id: number; old_data: string; new_data: string }>(
+      "SELECT staff_id, old_data, new_data FROM bookinn.audit_trail WHERE aff_tab = 'STAFF' AND rec_id = '1001' ORDER BY audit_id DESC LIMIT 1",
+    );
+    expect(audit.rows[0]).toMatchObject({ staff_id: 1003, old_data: "PASS=[changed]", new_data: "PASS=[changed]" });
+    expect(`${audit.rows[0].old_data}${audit.rows[0].new_data}`).not.toContain("$2");
+
+    // There is no self-service "forgot password" route to sign in without the password.
+    const { access } = await import("node:fs/promises");
+    await expect(access("src/app/forgot-password")).rejects.toThrow();
+  });
+
   it("signs session tokens and rejects tampered ones", async () => {
     const token = await signSession(1003);
     expect(await readSessionToken(token)).toBe(1003);
