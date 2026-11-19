@@ -21,6 +21,7 @@ import { setActor, setHotelDay, type Actor } from "./audit";
 import { mapDbError } from "./crud";
 import { assertFrontDesk, assertRoomAvailable, earliestCheckIn, lockReservation, roomPriceCents } from "./rules";
 import { beforeCutoff, cutoffFor, hotelNow, hotelToday, nightsBetween } from "./dates";
+import { trustedNow } from "./clock";
 import { peso } from "./money";
 import { isRealDate } from "./validation";
 
@@ -68,7 +69,7 @@ export async function modifyReservation(
   actor: Actor,
   resId: string | number,
   input: ModifyStayInput[],
-  now: Date = new Date(),
+  now: Date = trustedNow(),
 ): Promise<ModificationResult> {
   assertFrontDesk(actor, "edit reservations");
   const parsed = schema.safeParse(input);

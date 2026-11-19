@@ -1,5 +1,6 @@
 "use client";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { GuestPicker } from "./guest-picker";
 import type { FormState } from "@/app/actions";
 
 export interface FormField {
@@ -15,6 +16,24 @@ export interface FormField {
   /** Shown but not submitted (immutable on edit). */
   readOnly?: boolean;
   value?: string;
+  /** Pick from a searchable list instead of a dropdown (customers: type a name or email). */
+  search?: boolean;
+}
+
+/** Generic-form wrapper around the Guest search box (keeps the chosen value in local state). */
+function SearchField({ f, id, initial, invalid, describedBy }: { f: FormField; id: string; initial: string; invalid?: boolean; describedBy?: string }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <GuestPicker
+      name={f.name}
+      inputId={id}
+      options={f.options ?? []}
+      value={value}
+      onChange={setValue}
+      invalid={invalid}
+      describedBy={describedBy}
+    />
+  );
 }
 
 type Action = (prev: FormState, fd: FormData) => Promise<FormState>;
@@ -52,6 +71,8 @@ export function EntityForm({ action, fields, submitLabel }: { action: Action; fi
               {f.options?.find((o) => o.value === f.value)?.label ?? f.value}
             </output>
           );
+        } else if (f.search) {
+          control = <SearchField key={key} f={f} id={id} initial={val(f)} invalid={!!err} describedBy={describedBy} />;
         } else if (f.type === "enum" || f.type === "ref") {
           control = (
             <select key={key} {...common} defaultValue={val(f)}>
@@ -103,7 +124,7 @@ export function EntityForm({ action, fields, submitLabel }: { action: Action; fi
       })}
       <div>
         <button type="submit" className="btn btn-primary" disabled={pending}>
-          {pending ? "Saving…" : submitLabel}
+          {pending ? <><span className="spinner" aria-hidden="true" /> {"Saving…"}</> : submitLabel}
         </button>
       </div>
     </form>
@@ -143,7 +164,7 @@ export function ConfirmButton({
         </p>
       )}
       <button type="submit" className={`btn btn-${variant}`} disabled={pending}>
-        {pending ? pendingLabel : label}
+        {pending ? <><span className="spinner" aria-hidden="true" /> {pendingLabel}</> : label}
       </button>
     </form>
   );
@@ -192,7 +213,7 @@ export function ActionForm({
       <div className={className}>
         {children}
         <button type="submit" className={`btn btn-${variant}`} disabled={pending}>
-          {pending ? pendingLabel : submitLabel}
+          {pending ? <><span className="spinner" aria-hidden="true" /> {pendingLabel}</> : submitLabel}
         </button>
       </div>
     </form>
@@ -233,7 +254,7 @@ export function PasswordForm({ action }: { action: Action }) {
       <SimpleField name="new_password" label="New password" type="password" autoComplete="new-password" state={state} />
       <SimpleField name="confirm_password" label="Confirm new password" type="password" autoComplete="new-password" state={state} />
       <div>
-        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? "Saving…" : "Change password"}</button>
+        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? <><span className="spinner" aria-hidden="true" /> {"Saving…"}</> : "Change password"}</button>
       </div>
     </form>
   );
@@ -246,7 +267,7 @@ export function NameForm({ action, name }: { action: Action; name: string }) {
       <FormMessages state={state} />
       <SimpleField name="name" label="Full name" autoComplete="name" state={state} defaultValue={state.values?.name ?? name} />
       <div>
-        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? "Saving…" : "Save name"}</button>
+        <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? <><span className="spinner" aria-hidden="true" /> {"Saving…"}</> : "Save name"}</button>
       </div>
     </form>
   );

@@ -38,6 +38,8 @@ export async function buildFormFields(db: Db, actor: Actor, e: EntityDef, mode: 
             : f.help,
       options,
       readOnly: immutable,
+      // Every customer field in the system is a type-to-search box (name or email), as on New booking.
+      search: f.type === "ref" && f.ref === "customer" && !immutable,
       value: f.type === "password" ? "" : current !== undefined && current !== null ? String(current) : f.defaultValue,
     });
   }

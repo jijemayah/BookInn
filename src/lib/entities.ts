@@ -46,6 +46,12 @@ export interface FieldDef {
    * `options` is only the starting list.
    */
   dbEnum?: "room_type_t" | "room_view_t";
+  /**
+   * Computed, read-only list column (SQL over alias `m`, the entity's row), e.g. a
+   * reservation's rooms and stay dates. Shown in lists and details; never written,
+   * sorted, searched or filtered.
+   */
+  virtualSql?: string;
   /** For type "ref": the referenced entity key. */
   ref?: EntityKey;
   /** Accept on create (default true). */
@@ -80,8 +86,10 @@ export interface EntityDef {
   /** true → identity column; false → natural key typed by the user. */
   pkGenerated: boolean;
   fields: FieldDef[];
-  /** SQL expression (alias t) used as the human label in dropdowns / lists. */
+  /** SQL expression (alias t) used as the human label in dropdowns and search. */
   labelSql: string;
+  /** Shorter label (alias t) shown in table cells that link to this entity; defaults to labelSql. */
+  shortLabelSql?: string;
   /** Roles allowed per operation through the generic CRUD screens. */
   perms: Record<Op, Role[]>;
   /** Front Desk creates these through the booking form, not the generic form. */
@@ -126,6 +134,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkType: "int",
     pkGenerated: true,
     labelSql: "t.cus_name || ' <' || t.cus_email || '>'",
+    shortLabelSql: "t.cus_name",
     perms: perms([FD, DBA], [FD, DBA], [DBA]),
     fields: [
       { name: "cus_name", label: "Full name", type: "text", required: true, max: 100 },
@@ -209,6 +218,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkGenerated: false,
     labelSql:
       "'Room ' || t.room_no || COALESCE((SELECT ' – ' || d.room_type || ', ' || d.room_view || ' (₱' || d.room_price || '/night)' FROM bookinn.room_details d WHERE d.room_type_id = t.room_type_id), '')",
+    shortLabelSql: "'Room ' || t.room_no",
     perms: perms([DBA], [DBA], [DBA]),
     fields: [
       { name: "room_no", label: "Room number", type: "int", required: true, min: 1, onUpdate: false },
@@ -233,11 +243,27 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkGenerated: true,
     labelSql:
       "'#' || t.res_id || ' – ' || COALESCE((SELECT c.cus_name FROM bookinn.customer c WHERE c.cus_id = t.cus_id), '?') || ' (' || t.booking_status || ')'",
+    shortLabelSql: "'#' || t.res_id || ' · ' || COALESCE((SELECT c.cus_name FROM bookinn.customer c WHERE c.cus_id = t.cus_id), '?')",
     perms: perms([FD, DBA], [DBA], [DBA]),
     bookingFlow: true,
     correctionOnly: true,
     fields: [
-      { name: "cus_id", label: "Customer", type: "ref", ref: "customer", required: true },
+      { name: "cus_id", label: "Guest", type: "ref", ref: "customer", required: true },
+      {
+        name: "rooms",
+        label: "Rooms",
+        type: "text",
+        computed: true,
+        virtualSql: "SELECT string_agg(rr.room_no::text, ', ' ORDER BY rr.room_no) FROM bookinn.reservation_room rr WHERE rr.res_id = m.res_id",
+      },
+      {
+        name: "stay",
+        label: "Stay",
+        type: "text",
+        computed: true,
+        virtualSql:
+          "SELECT min(rr.check_in_date)::text || ' → ' || max(rr.check_out_date)::text FROM bookinn.reservation_room rr WHERE rr.res_id = m.res_id",
+      },
       {
         name: "booking_status",
         label: "Booking status",
@@ -260,6 +286,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkType: "int",
     pkGenerated: true,
     labelSql: "'#' || t.res_room_id || ' room ' || t.room_no || ' ' || t.check_in_date || ' → ' || t.check_out_date",
+    shortLabelSql: "'Room ' || t.room_no || ' · ' || t.check_in_date || ' → ' || t.check_out_date",
     perms: perms([DBA], [DBA], [DBA]),
     bookingFlow: true,
     correctionOnly: true,
@@ -282,7 +309,11 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     pkType: "int",
     pkGenerated: true,
     labelSql: "'#' || t.pay_id || ' – ₱' || t.pay_amt || ' (' || t.pay_method || ')'",
-    perms: perms([DBA], [DBA], [DBA]),
+    shortLabelSql: "'#' || t.pay_id || ' · ₱' || t.pay_amt",
+    // Payments are created only by the booking (Initial) and the check-out settlement (Checkout).
+    // SRS 3.3 Payment Correction: a wrongly recorded payment is corrected by the Database
+    // Administrator by editing the existing record, not by adding another payment.
+    perms: perms([], [DBA], [DBA]),
     bookingFlow: true,
     correctionOnly: true,
     fields: [

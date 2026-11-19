@@ -163,10 +163,11 @@ describe("payments and receipts", () => {
     expect(await count(db, "reservation_room", "room_no = 205 AND check_in_date = '2027-06-01'")).toBe(0);
   });
 
-  it("10. a second payment for the same reservation is rejected", async () => {
+  it("10. a second payment for the same reservation is rejected; corrections edit the existing payment", async () => {
+    // SRS 3.3 Payment Correction: no one adds payments on the generic form, not even the administrator.
     await expect(
       createRow(db, ADMIN, "payment", { res_id: "1004", pay_method: "Cash", pay_date: TODAY, pay_amt: "3000", discount_type: "NONE" }, TODAY),
-    ).rejects.toMatchObject({ code: "conflict" });
+    ).rejects.toMatchObject({ code: "forbidden" });
     await expect(
       db.query("INSERT INTO bookinn.payment (res_id, pay_method, pay_date, pay_amt) VALUES (1004, 'Cash', '2026-11-01', 3000)"),
     ).rejects.toMatchObject({ code: "23505" });

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { Icon, type IconName } from "./icons";
 
 /** On phones the menu is collapsed behind a button; on md+ screens it is always shown. */
 export function MobileMenu({ children }: { children: ReactNode }) {
@@ -22,9 +23,9 @@ export function MobileMenu({ children }: { children: ReactNode }) {
         aria-controls="main-menu"
         onClick={() => setOpen((o) => !o)}
       >
-        {open ? "Close" : "Menu"}
+        <Icon name={open ? "close" : "menu"} size={16} /> {open ? "Close" : "Menu"}
       </button>
-      <div id="main-menu" className={`${open ? "block" : "hidden"} md:block`}>
+      <div id="main-menu" className={`${open ? "block animate-in" : "hidden"} md:block`}>
         {children}
       </div>
     </>
@@ -34,9 +35,10 @@ export function MobileMenu({ children }: { children: ReactNode }) {
 export interface NavItem {
   href: string;
   label: string;
+  icon: IconName;
 }
 
-/** Sidebar links; highlights the current section. Which links appear is decided on the server. */
+/** Sidebar links with icons; highlights the current section. Which links appear is decided on the server. */
 export function NavLinks({ groups }: { groups: { title?: string; items: NavItem[] }[] }) {
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
@@ -44,23 +46,25 @@ export function NavLinks({ groups }: { groups: { title?: string; items: NavItem[
     <>
       {groups.map((g, i) => (
         <div key={i} className="mb-4">
-          {g.title && <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-brand-300">{g.title}</p>}
+          {g.title && <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-brand-300">{g.title}</p>}
           <ul className="space-y-0.5">
-            {g.items.map((it) => (
-              <li key={it.href}>
-                <Link
-                  href={it.href}
-                  aria-current={active(it.href) ? "page" : undefined}
-                  className={`block rounded-md border-l-4 px-3 py-1.5 text-sm no-underline transition-colors hover:no-underline ${
-                    active(it.href)
-                      ? "border-brand-400 bg-brand-800 font-medium text-white"
-                      : "border-transparent text-brand-100 hover:bg-brand-800/60 hover:text-white"
-                  }`}
-                >
-                  {it.label}
-                </Link>
-              </li>
-            ))}
+            {g.items.map((it) => {
+              const on = active(it.href);
+              return (
+                <li key={it.href}>
+                  <Link
+                    href={it.href}
+                    aria-current={on ? "page" : undefined}
+                    className={`nav-link group flex items-center gap-3 rounded-lg px-3 py-2 text-sm no-underline hover:no-underline ${
+                      on ? "bg-white font-medium text-brand-900 shadow-sm" : "text-brand-100 hover:bg-brand-800 hover:text-white"
+                    }`}
+                  >
+                    <Icon name={it.icon} size={18} className={on ? "text-brand-800" : "text-brand-300 group-hover:text-white"} />
+                    <span>{it.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}

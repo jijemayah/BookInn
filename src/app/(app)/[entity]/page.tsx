@@ -96,14 +96,14 @@ export default async function ListPage({ params, searchParams }: PageProps<"/[en
         <EmptyState title={q || Object.keys(filters).length ? "No records match your search." : `No ${e.plural.toLowerCase()} yet.`} />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-line bg-white">
+          <div className="animate-in overflow-x-auto rounded-xl border border-line bg-white" style={{ animationDelay: "60ms" }}>
             <table>
               <caption className="sr-only">{e.plural}, page {res.page} of {pages}</caption>
               <thead>
                 <tr>
                   <th scope="col">{sortLink(e.pk, e.pk.toUpperCase())}</th>
                   {cols.map((f) => (
-                    <th scope="col" key={f.name}>{f.type === "ref" ? f.label : sortLink(f.name, f.label)}</th>
+                    <th scope="col" key={f.name}>{f.type === "ref" || f.virtualSql ? f.label : sortLink(f.name, f.label)}</th>
                   ))}
                 </tr>
               </thead>

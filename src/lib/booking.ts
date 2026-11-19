@@ -19,6 +19,7 @@ import { assertCan, mapDbError } from "./crud";
 import { adjustPoints, assertRoomAvailable, finishCancellation, lockReservation } from "./rules";
 import { amountDue, DISCOUNT_POINTS, pointsFor, toCents, peso, type Discount } from "./money";
 import { hotelNow, hotelToday, nightsBetween } from "./dates";
+import { trustedNow } from "./clock";
 import { isMoney, isRealDate } from "./validation";
 import { sendFor } from "./email";
 
@@ -249,7 +250,7 @@ export async function createBooking(db: Db, actor: Actor, input: BookingInput, t
  * charges are voided, spent points are returned, earned points are never
  * credited. One transaction: CANCELLATION, REFUND, charges, points, status.
  */
-export async function cancelReservation(db: Db, actor: Actor, resId: string | number, now: Date = new Date()) {
+export async function cancelReservation(db: Db, actor: Actor, resId: string | number, now: Date = trustedNow()) {
   assertCan(actor, ENTITIES.cancellation, "create");
   const today = hotelToday(now);
   let saved;

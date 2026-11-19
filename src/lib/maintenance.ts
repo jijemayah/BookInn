@@ -12,6 +12,7 @@
 import type { Db } from "./db/types";
 import { setActor } from "./audit";
 import { hotelToday } from "./dates";
+import { syncClock } from "./clock";
 import { sendNoShowNotice, type EmailOutcome } from "./email";
 
 export interface MaintenanceResult {
@@ -25,6 +26,8 @@ export interface MaintenanceResult {
 }
 
 export async function runMaintenance(db: Db, opts: { today?: string; staffId?: number | null } = {}): Promise<MaintenanceResult> {
+  // The cron request has no staff session, so the clock is checked here (database time, not this computer's).
+  if (!opts.today) await syncClock(db);
   const today = opts.today ?? hotelToday();
   const result = await db.tx(async (t) => {
     await setActor(t, { staffId: opts.staffId ?? null });

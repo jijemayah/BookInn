@@ -4,6 +4,8 @@
  * all dates and times use Asia/Manila; check-in 14:00, check-out 12:00).
  * Manila has no daylight saving time, so string comparison is safe.
  */
+import { trustedNow } from "./clock";
+
 export const HOTEL_TZ = "Asia/Manila";
 export const CHECK_IN_TIME = "14:00:00";
 export const CHECK_OUT_TIME = "12:00:00";
@@ -24,13 +26,14 @@ const parts = (now: Date) =>
       .map((p) => [p.type, p.value]),
   );
 
-export function hotelToday(now: Date = new Date()): string {
+/** Today in PHT. Defaults to the trusted (database-corrected) time, not this computer's clock. */
+export function hotelToday(now: Date = trustedNow()): string {
   const p = parts(now);
   return `${p.year}-${p.month}-${p.day}`;
 }
 
 /** Current hotel time, e.g. '2026-06-25 14:10:00' (stored in ACTUAL_CHECK_IN / ACTUAL_CHECK_OUT). */
-export function hotelNow(now: Date = new Date()): string {
+export function hotelNow(now: Date = trustedNow()): string {
   const p = parts(now);
   return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
 }

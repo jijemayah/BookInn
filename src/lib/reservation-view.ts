@@ -8,6 +8,7 @@ import type { Db } from "./db/types";
 import type { Actor } from "./audit";
 import { DBA, FD } from "./entities";
 import { beforeCutoff, cutoffFor, hotelNow, hotelToday } from "./dates";
+import { trustedNow } from "./clock";
 import { toCents } from "./money";
 
 export type StayRoom = {
@@ -46,7 +47,7 @@ export interface ReservationView {
   canSettle: boolean;
 }
 
-export async function reservationView(db: Db, actor: Actor, resId: string | number, now: Date = new Date()): Promise<ReservationView | null> {
+export async function reservationView(db: Db, actor: Actor, resId: string | number, now: Date = trustedNow()): Promise<ReservationView | null> {
   const today = hotelToday(now);
   const nowLocal = hotelNow(now);
   const r = await db.query<{ res_id: number; booking_status: string; cus_id: number; cus_name: string; cus_email: string }>(

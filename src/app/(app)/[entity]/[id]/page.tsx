@@ -7,7 +7,6 @@ import { isAppError } from "@/lib/errors";
 import { buildFormFields } from "@/lib/form-fields";
 import { reservationCost } from "@/lib/rules";
 import { reservationView, roomChoices } from "@/lib/reservation-view";
-import { peso } from "@/lib/money";
 import type { Db, Row } from "@/lib/db/types";
 import { deleteAction, updateAction } from "@/app/actions";
 import { ConfirmButton, EntityForm } from "@/components/forms";
@@ -64,7 +63,8 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
   const fields = canUpdate ? await buildFormFields(db, actor, e, "update", row) : [];
   const related = await Promise.all(
     dependentsOf(e.key)
-      .filter((d) => canRead(actor.role, d.entity))
+      // The reservation page shows its rooms in the Stay panel, so the list is not repeated.
+      .filter((d) => canRead(actor.role, d.entity) && !(e.key === "reservation" && d.entity.key === "reservation_room"))
       .map(async (d) => ({ ...d, rows: await listRows(db, actor, d.entity.key, { filter: { field: d.field, value: id }, limit: 50 }) })),
   );
   const cost = e.key === "reservation" ? await reservationCost(db, id) : null;
@@ -106,7 +106,8 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
           </dl>
           <p className="help mt-4">This receipt was emailed to the guest when the payment was recorded. Print it if the guest asks for a paper copy.</p>
         </Section>
-      ) : (
+      ) : stay ? null : (
+        // Reservations show everything in the Stay panel below, so their details are not repeated here.
         <Section title="Details">
           <dl className="details">
             <dt>{e.pk.toUpperCase()}</dt>
@@ -119,19 +120,11 @@ export default async function DetailPage({ params, searchParams }: PageProps<"/[
                   <dd className="break-words">{cell(f, row)}</dd>
                 </div>
               ))}
-            {cost && (
-              <>
-                <dt>Rooms booked</dt>
-                <dd>{cost.rooms}</dd>
-                <dt>Room nights at room rates</dt>
-                <dd>{peso(cost.totalCents)} <span className="help">(room prices are fixed per room type)</span></dd>
-              </>
-            )}
           </dl>
         </Section>
       )}
 
-      {stay && <ReservationPanel v={stay} rooms={roomList} />}
+      {stay && <ReservationPanel v={stay} rooms={roomList} roomNightsCents={cost?.totalCents ?? 0} />}
 
       {related.map((d) => (
         <Section key={`${d.entity.key}.${d.field}`} title={d.entity.plural}>
